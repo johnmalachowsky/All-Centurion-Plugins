@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{EFFA9B2D-54E4-41FB-BDC3-3C53F489C890}</ProjectGuid>
+    <ProjectGuid>{60C7D078-C3EC-409D-8A5F-36DC73EABAE8}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>NetworkGateWayInterface_IH</RootNamespace>
