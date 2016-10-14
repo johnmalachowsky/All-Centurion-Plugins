@@ -330,7 +330,7 @@ namespace CHMModules
                                             _VantageProDevices[i].CurrentValue = d.ToString();
                                             _VantageProDevices[i].HasReceivedValidData = true;
                                             _VantageProDevices[i].LastChangeTime = _PluginCommonFunctions.CurrentTime;
-                                            TDP.CreateFlag(_VantageProDevices[i], Math.Round(d, 0).ToString(), d.ToString());
+                                            TDP.CreateFlag(_VantageProDevices[i], Math.Round(d, 0).ToString(), Math.Round(d, 4).ToString());
                                         }
 
                                     }

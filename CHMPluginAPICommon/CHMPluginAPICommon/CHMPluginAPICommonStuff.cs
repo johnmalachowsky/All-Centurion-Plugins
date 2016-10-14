@@ -332,6 +332,19 @@ namespace CHMPluginAPICommon
         public string Comments;
     }
 
+    public class FlagArchiveStruct
+    {
+        public string SourceUniqueID;
+        public long CreateTick;
+        public long ChangeTick;
+        public string Name;
+        public string SubType;
+        public string Value;
+        public string RawValue;
+        public string RoomUniqueID;
+        public bool IsDeviceOffline;
+    }
+
     public class FlagChangeHistory
     {
         public long ChangeTime;
@@ -404,7 +417,7 @@ namespace CHMPluginAPICommon
             OD.MaxHistoryToSave = this.MaxHistoryToSave;
             OD.IsDeviceOffline = this.IsDeviceOffline;
             OD.Archive = this.Archive;
-            if (OD.ModulesToNotifyOnChange != null)
+             if (OD.ModulesToNotifyOnChange != null)
             {
                 OD.ModulesToNotifyOnChange = new int[this.ModulesToNotifyOnChange.Length];
                 Array.Copy(this.ModulesToNotifyOnChange, OD.ModulesToNotifyOnChange, this.ModulesToNotifyOnChange.Length);
@@ -568,7 +581,6 @@ namespace CHMPluginAPICommon
         public int MaxHistoryToSave;
         public string ValidValues;
         public bool IsDeviceOffline;
-        public bool Archive;
 
     }
 

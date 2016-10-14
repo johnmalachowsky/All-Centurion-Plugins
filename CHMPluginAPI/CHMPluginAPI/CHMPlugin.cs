@@ -179,7 +179,7 @@ namespace CHMPluginAPI
         public static PluginStatusStruct PluginStatus;
         internal static bool StartupComplete = false;
 
-        private static ConcurrentQueue<FlagDataStruct> ChangedFlags; 
+        private static ConcurrentQueue<FlagArchiveStruct> ChangedFlags; 
 
         static private DeviceStruct[] Devices;
 
@@ -297,8 +297,6 @@ namespace CHMPluginAPI
                 PluginEventArgs e = new PluginEventArgs();
                 _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
                 XMLDeviceScripts XMLScripts = new XMLDeviceScripts();
-
-                ChangedFlags = new ConcurrentQueue<FlagDataStruct>();
 
                 if (!_PCF.GetStartupField("NumberOfFlagChangesToStore", out _PluginCommonFunctions.NumberOfFlagChangesToStore))
                 {
@@ -474,12 +472,9 @@ namespace CHMPluginAPI
             return;
         }
 
-        public void CHMAPI_FlagCommingFromServer(FlagDataStruct[] FlagData)
+        public void CHMAPI_QueuesCommingFromServer(object[] Queues)
         {
-            foreach(FlagDataStruct Flag in FlagData)
-            {
-                ChangedFlags.Enqueue(Flag);
-            }
+            ChangedFlags=(ConcurrentQueue<FlagArchiveStruct>)Queues[0];
         }
 
 
@@ -982,7 +977,7 @@ namespace CHMPluginAPI
             }
         }
 
-        internal bool GetAnyUpdatedFlagsSentFromServer(out FlagDataStruct Flag)
+        internal bool GetAnyUpdatedFlagsSentFromServer(out FlagArchiveStruct Flag)
         {
             return(ChangedFlags.TryDequeue(out Flag));
         }
@@ -1830,9 +1825,6 @@ namespace CHMPluginAPI
         {
             try
             {
-                string Q;
-                if (Name.ToLower().Contains("Insteon Remote".ToLower()))
-                    Q = "L";
                 NewFlagStruct FlagToSave = new NewFlagStruct();
 
                 FlagToSave.FlagName = Name;
@@ -1965,6 +1957,12 @@ namespace CHMPluginAPI
         {
             try
             {
+                if(StartupFields==null)
+                {
+                    Value = "";
+                    return (false);
+                }
+
                 int i = Array.IndexOf(StartupFields, FieldName);
                 if (i == -1)
                 {
@@ -2620,7 +2618,7 @@ namespace CHMPluginAPI
             _PluginDatabaseAccess PluginDatabaseAccess = new _PluginDatabaseAccess(Path.GetFileNameWithoutExtension((System.Reflection.Assembly.GetExecutingAssembly().GetName().Name)));
             if (!_PluginDatabaseAccess.DBData.DBOpen)
             {
-                DBOpen = PluginDatabaseAccess.OpenOrCreatePluginDB(ServerAccessFunctions.PluginDataDirectory, out DBVersion, out DBFileName, true, _PluginCommonFunctions.DBPassword);
+                DBOpen = PluginDatabaseAccess.OpenOrCreatePluginDB(ServerAccessFunctions.PluginDataDirectory, out DBVersion, out DBFileName, true, _PluginCommonFunctions.DBPassword, "", ref _PluginDatabaseAccess.DBData);
                 if (!DBOpen)
                 {
                     _PluginCommonFunctions.GenerateErrorRecord(2000000, "Could Not Create Database File '" + DBFileName + "'", PluginDatabaseAccess.GetLastError(), new System.Exception());
@@ -2632,7 +2630,7 @@ namespace CHMPluginAPI
                 string[] Type = { "text", "varchar", "varchar", "varchar", "varchar", "varchar", "varchar", "varchar", };
                 bool[] NotNull = { true, true, false, false, false, false, false, false };
                 string[] PrimaryKeys = { "InterfaceID", "DeviceID", "EventTime", "FlagName" };
-                if (!PluginDatabaseAccess.CreateTable(TableName, Fields, Type, NotNull, PrimaryKeys))
+                if (!PluginDatabaseAccess.CreateTable(TableName, Fields, Type, NotNull, PrimaryKeys, _PluginDatabaseAccess.DBData))
                     return (false);
             }
             string[] Values = { Device.InterfaceUniqueID, Device.DeviceUniqueID, SaveLogsDateFormat(EventDateTime), (Name + " " + SubType).Trim(), Value, RawValue, Device.DeviceName, Device.RoomUniqueID };
@@ -3685,7 +3683,7 @@ namespace CHMPluginAPI
 
         static internal DatabaseData DBData;
         static internal DatabaseData AuxDBData;
-        private string _PluginName;
+        static internal string _PluginName;
         internal enum PluginDataLocationType { Oldest, Newest };
 
         internal _PluginDatabaseAccess(string PluginName)
@@ -3944,12 +3942,12 @@ namespace CHMPluginAPI
             }
         }
 
-        internal bool OpenOrCreatePluginDB(string DBDirectory, out string Version, out string DBFileName, bool Create, string Password)
+        internal bool OpenOrCreatePluginDB(string DBDirectory, out string Version, out string DBFileName, bool Create, string Password, string Suffix, ref DatabaseData DBDataToUse)
         {
-            DBFileName = DBDirectory + "\\" + _PluginName + "\\" + _PluginName + ".3db";
+            DBFileName = DBDirectory + "\\" + _PluginName + "\\" + _PluginName + Suffix+  ".3db";
             Version = "";
 
-            if (DBData.DBOpen)
+            if (DBDataToUse.DBOpen)
                 return (true);
 
             if (!Directory.Exists(DBDirectory + "\\" + _PluginName))
@@ -3966,8 +3964,8 @@ namespace CHMPluginAPI
                 }
                 catch (Exception err)
                 {
-                    DBData.DBOpen = false;
-                    DBData.DBLastError = err;
+                    DBDataToUse.DBOpen = false;
+                    DBDataToUse.DBLastError = err;
                     return (false);
                 }
 
@@ -3976,17 +3974,17 @@ namespace CHMPluginAPI
 
             try
             {
-                DBData.DB = new SQLiteConnection("Data Source=" + DBFileName + "; FailIfMissing=true;Synchronous=Full;");
-                DBData.DB.SetPassword(Password);
-                DBData.DB.Open();
-                DBData.DBOpen = true;
+                DBDataToUse.DB = new SQLiteConnection("Data Source=" + DBFileName + "; FailIfMissing=true;Synchronous=Full;");
+                DBDataToUse.DB.SetPassword(Password);
+                DBDataToUse.DB.Open();
+                DBDataToUse.DBOpen = true;
                 Version = "-SQLite Version " + SQLiteConnection.SQLiteVersion;
                 return (true);
             }
             catch (Exception err)
             {
-                DBData.DBOpen = false;
-                DBData.DBLastError = err;
+                DBDataToUse.DBOpen = false;
+                DBDataToUse.DBLastError = err;
                 return (false);
             }
 
@@ -4102,24 +4100,24 @@ namespace CHMPluginAPI
         }
 
 
-        private bool ExecuteSQLCommand(string Command)
+        private bool ExecuteSQLCommand(string Command, DatabaseData DBDataToUse)
         {
             try
             {
-                SQLiteCommand mycommand = new SQLiteCommand(DBData.DB);
+                SQLiteCommand mycommand = new SQLiteCommand(DBDataToUse.DB);
                 mycommand.CommandText = Command;
                 mycommand.ExecuteNonQuery();
             }
             catch (Exception err)
             {
-                DBData.DBLastError = err;
+                DBDataToUse.DBLastError = err;
                 return (false);
             }
             return (true);
 
         }
 
-        internal bool CreateTable(string TableName, string[] Fields, string[] Types, bool[] NotNull, string[] PrimaryKeys)
+        internal bool CreateTable(string TableName, string[] Fields, string[] Types, bool[] NotNull, string[] PrimaryKeys, DatabaseData DBDataToUse)
         {
 
             try
@@ -4142,11 +4140,11 @@ namespace CHMPluginAPI
                     T = T + DATABASEQUOTE + PrimaryKeys[i] + DATABASEQUOTE;
                 }
                 T = T + "))";
-                return (ExecuteSQLCommand(T));
+                return (ExecuteSQLCommand(T, DBDataToUse));
             }
             catch (Exception err)
             {
-                DBData.DBLastError = err;
+                DBDataToUse.DBLastError = err;
                 return (false); //Indicates error
             }
         }
@@ -4190,7 +4188,7 @@ namespace CHMPluginAPI
             if (!_PluginDatabaseAccess.DBData.DBOpen)
             {
                 string DBVersion, DBFileName;
-                bool DBOpen = OpenOrCreatePluginDB(ServerAccessFunctions.PluginDataDirectory, out DBVersion, out DBFileName, true, _PluginCommonFunctions.DBPassword);
+                bool DBOpen = OpenOrCreatePluginDB(ServerAccessFunctions.PluginDataDirectory, out DBVersion, out DBFileName, true, _PluginCommonFunctions.DBPassword, "", ref DBData);
                 if (!DBOpen)
                 {
                     Values = null;
@@ -4203,11 +4201,11 @@ namespace CHMPluginAPI
             SQLiteDataReader reader = null;
             if (VerifyIfTableExists(TableName) == false)
             {
-                string[] Type = { "text", "varchar", "varchar", "varchar", "varchar", "varchar", "varchar", "varchar", };
+                string[] Type = { "text", "varchar", "varchar", "varchar", "varchar", "varchar", "varchar", "varchar" };
                 bool[] NotNull = { true, true, false, false, false, false, false, false };
                 string[] PrimaryKeys = { "InterfaceID", "DeviceID", "EventTime", "FlagName" };
                 string[] Fields = { "InterfaceID", "DeviceID", "EventTime", "FlagName", "Value", "RawData", "FullDeviceName", "RoomID" };
-                if (!CreateTable(TableName, Fields, Type, NotNull, PrimaryKeys))
+                if (!CreateTable(TableName, Fields, Type, NotNull, PrimaryKeys, _PluginDatabaseAccess.DBData))
                 {
                     Values = null;
                     FieldNames = null;
