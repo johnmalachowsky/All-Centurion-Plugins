@@ -64,6 +64,10 @@ namespace CHMModules
         private static SemaphoreSlim CheckForNodeListSlim;
         private static SemaphoreSlim ProcessNodeInformationSlim;
 
+        private static ConcurrentDictionary<string, Tuple<DateTime, string, int>> SentCommands;
+        private static int ISYResendTime;
+        private static int ISYMaxTimesToResend;
+
 
         static internal string ISYDeviceInformationKey(string V1, string V2)
         {
@@ -100,27 +104,23 @@ namespace CHMModules
             ServerAccessFunctions._ShutDownPlugin += ShutDownPluginEventHandler;
             ServerAccessFunctions._StartupInfoFromServer += StartupInfoEventHandler;
             ServerAccessFunctions._PluginStartupCompleted += PluginStartupCompleted;
-            //            ServerAccessFunctions._IncedentFlag += IncedentFlagEventHandler;
-            ServerAccessFunctions._Command += CommandEvent;
-            ServerAccessFunctions._PluginStartupInitialize += PluginStartupInitialize;
+            ServerAccessFunctions._IncedentFlag += IncedentFlagEventHandler;
+             ServerAccessFunctions._PluginStartupInitialize += PluginStartupInitialize;
 
             AquiredAddresses = new ConcurrentQueue<string>();
             CheckForNodeListSlim = new SemaphoreSlim(1,1);
             //SubscribedInfo = new ConcurrentQueue<string>();
             SubscribedInfoSlim = new SemaphoreSlim(1, 1);
             ProcessNodeInformationSlim = new SemaphoreSlim(1, 1);
-
-    }
-
-    private static void CommandEvent(ServerEvents WhichEvent, PluginEventArgs Value)
-        {
+            SentCommands = new ConcurrentDictionary<string, Tuple<DateTime, string, int>>();
+ 
 
         }
 
-        //private static void IncedentFlagEventHandler(ServerEvents WhichEvent, PluginEventArgs Value)
-        //{
+         private static void IncedentFlagEventHandler(ServerEvents WhichEvent, PluginEventArgs Value)
+        {
 
-        //}
+        }
 
         private static void PluginStartupInitialize(ServerEvents WhichEvent, PluginEventArgs Value)
         {
@@ -146,6 +146,8 @@ namespace CHMModules
 
             string S;
             ISYDeviceInformation = new SortedList<string, string>();
+            ISYResendTime = _PCF.GetStartupField("ISYResendTime", 5);
+            ISYMaxTimesToResend = _PCF.GetStartupField("ISYMaxTimesToResend", 10);
 
             _PCF.GetStartupField("ISYDeviceDataCodes", out S);
             try
@@ -226,14 +228,14 @@ namespace CHMModules
                     PCS2.OutgoingDS.CommDataControlInfo[0].WaitForType = CommDataControlInfoStruct_WhatToWaitFor.Anything;
                     PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend = new WebHeaderCollection();
                     PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend.Add("Authorization", "Basic " + EncodedPassword);
-
+                    SentCommands.TryAdd("http://$$IPAddress/rest/config", new Tuple<DateTime, String,int>(_PluginCommonFunctions.CurrentTime, PCS2.OutgoingDS.LocalIDTag,0));
                     _PCF.QueuePluginInformationToPlugin(PCS2);
                     ISYFirstInit = true;
 
                 }
 
             }
-            else //Has the Link to the ISY Expired/Died
+            else //Has the Link to the ISY Expired/Died && Check for Re-sends
             {
                 var diffInSeconds = (_PluginCommonFunctions.CurrentTime - WebSocketSharp_LastHeartbeat).TotalSeconds;
                 if(diffInSeconds> _PCF.GetStartupField("MaxHeartbeatTime", 120))
@@ -242,6 +244,52 @@ namespace CHMModules
                     WebSocketSharp_LastHeartbeat = _PluginCommonFunctions.CurrentTime;
                     WebSocketSharp_Close();
                     WebSocketSharp_DoStuff();
+                }
+
+                if(Value.HeartBeatTC!= HeartbeatTimeCode.Nothing)
+                {
+                    foreach (var Commands in SentCommands)
+                    {
+                        if (Value.DateValue>Commands.Value.Item1.AddSeconds(ISYResendTime))
+                        {
+                            Tuple<DateTime, String, int> VX;
+
+                            if (!SentCommands.TryRemove(Commands.Key, out VX))
+                            {
+                                VX = new Tuple<DateTime, string, int>(_PluginCommonFunctions.CurrentTime, "", 0);
+                            }
+
+                            if (VX.Item3 > ISYMaxTimesToResend)
+                            {
+                                _PluginCommonFunctions.GenerateLocalMessage(2000013, "", Commands.Key);
+                            }
+                            else
+                            {
+                                PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
+                                PCS2.Command = PluginCommandsToPlugins.PriorityProcessNow;
+                                PCS2.DestinationPlugin = LinkPlugin;
+                                PCS2.PluginReferenceIdentifier = LinkPluginReferenceIdentifier;
+                                PCS2.SecureCommunicationIDCode = LinkPluginSecureCommunicationIDCode;
+                                PCS2.OutgoingDS = new OutgoingDataStruct();
+                                //                   PCSAquired.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[1];
+                                PCS2.OutgoingDS.LocalIDTag = Commands.Value.Item2;
+                                PCS2.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[1];
+                                PCS2.OutgoingDS.CommDataControlInfo[0].CharactersToSend = _PCF.ConvertStringToByteArray(Commands.Key);
+                                PCS2.OutgoingDS.CommDataControlInfo[0].Method = "Get";
+                                PCS2.OutgoingDS.CommDataControlInfo[0].WaitForType = CommDataControlInfoStruct_WhatToWaitFor.Anything;
+                                PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend = new WebHeaderCollection();
+                                PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend.Add("Authorization", "Basic " + EncodedPassword);
+                                SentCommands.TryAdd(Commands.Key, new Tuple<DateTime, String, int>(_PluginCommonFunctions.CurrentTime, PCS2.OutgoingDS.LocalIDTag, VX.Item3 + 1));
+                                _PCF.QueuePluginInformationToPlugin(PCS2);
+                                _PluginCommonFunctions.GenerateLocalMessage(2000012, "", Commands.Key);
+
+                                break;
+                            }
+                        }
+                    }
+
+
+
                 }
             }
 
@@ -272,13 +320,15 @@ namespace CHMModules
                         {
                             OutgoingDataStruct ODS = (OutgoingDataStruct)Value.PluginData.OutgoingDS;
 
-                            Debug.WriteLine("TransComplete: " + ODS.LocalIDTag+" " + System.Text.Encoding.Default.GetString(Value.PluginData.OutgoingDS.CommDataControlInfo[0].CharactersToSend));
+                            //Debug.WriteLine("TransComplete: " + ODS.LocalIDTag+" " + System.Text.Encoding.Default.GetString(Value.PluginData.OutgoingDS.CommDataControlInfo[0].CharactersToSend));
 
                             if (ODS.CommDataControlInfo[0].ActualResponseReceived == null) //Not Valid Data
                             {
                                 continue;
                             }
-                            //string sXYY = _PCF.ConvertByteArrayToString(ODS.CommDataControlInfo[0].ActualResponseReceived);
+                            string sXYY = _PCF.ConvertByteArrayToString(ODS.CommDataControlInfo[0].CharactersToSend);
+                            Tuple<DateTime, String, int> Tpl;
+                            SentCommands.TryRemove(sXYY, out Tpl);
                             switch (ODS.LocalIDTag)
                             {
                                 case "Command":
@@ -298,12 +348,13 @@ namespace CHMModules
                                         PCS3.OutgoingDS.CommDataControlInfo[0].WaitForType = CommDataControlInfoStruct_WhatToWaitFor.Anything;
                                         PCS3.OutgoingDS.CommDataControlInfo[0].HeadersToSend = new WebHeaderCollection();
                                         PCS3.OutgoingDS.CommDataControlInfo[0].HeadersToSend.Add("Authorization", "Basic " + EncodedPassword);
-                                        int i = _PCF.ConvertToInt32(ODS.LocalData2);
-                                        if (i >= 0) //-1 means no query needed (Insteon Devices)
-                                        {
-                                            PCS3.OutgoingDS.ProcessCommunicationAtTimeTime = _PluginCommonFunctions.CurrentTime.AddSeconds(_PCF.ConvertToInt32(ODS.LocalData2));
-                                            _PCF.QueuePluginInformationToPlugin(PCS3);
-                                        }
+                                    //    int i = _PCF.ConvertToInt32(ODS.LocalData2);
+                                    //    if (i >= 0) //-1 means no query needed (Insteon Devices)
+                                    //    {
+                                    //        PCS3.OutgoingDS.ProcessCommunicationAtTimeTime = _PluginCommonFunctions.CurrentTime.AddSeconds(_PCF.ConvertToInt32(ODS.LocalData2));
+                                    //        _PCF.QueuePluginInformationToPlugin(PCS3);
+                                    //        SentCommands.TryAdd(ODS.LocalData, new Tuple<DateTime, String, int>(_PluginCommonFunctions.CurrentTime, PCS3.OutgoingDS.LocalIDTag,0)); 
+                                    //    }
                                     }
                                     break;
 
@@ -323,6 +374,8 @@ namespace CHMModules
                                     PCSConfig.OutgoingDS.CommDataControlInfo[0].WaitForType = CommDataControlInfoStruct_WhatToWaitFor.Anything;
                                     PCSConfig.OutgoingDS.CommDataControlInfo[0].HeadersToSend = new WebHeaderCollection();
                                     PCSConfig.OutgoingDS.CommDataControlInfo[0].HeadersToSend.Add("Authorization", "Basic " + EncodedPassword);
+                                    SentCommands.TryAdd("http://$$IPAddress/rest/nodes/devices", new Tuple<DateTime, String, int>(_PluginCommonFunctions.CurrentTime, PCSConfig.OutgoingDS.LocalIDTag,0));
+
                                     _PCF.QueuePluginInformationToPlugin(PCSConfig);
                                     WebSocketSharp_DoStuff();
                                     XElement XMLConfig = XElement.Parse(Configuration);
@@ -352,6 +405,10 @@ namespace CHMModules
                                     ProcessNodeInformation("Node", _PCF.ConvertByteArrayToString(ODS.CommDataControlInfo[0].ActualResponseReceived), Value.PluginData.DeviceUniqueID);
                                     CheckForNodeList();
                                     XMLDeviceScripts.StartMaintenance();
+                                    break;
+
+                                case "Maintenance Processed":
+                                    XMLDeviceScripts.UseNormalMaintenanceTime();
                                     break;
                             }
                             continue;
@@ -409,11 +466,11 @@ namespace CHMModules
                         {
                             PluginCommunicationStruct PCS = Value.PluginData;
                             DeviceStruct DV;
-                            Debug.WriteLine("command: " + PCS.DeviceUniqueID+" "+ PCS.String2);
+                            //Debug.WriteLine("command: " + PCS.DeviceUniqueID+" "+ PCS.String2);
 
                             XMLDeviceScripts XMLScripts = new XMLDeviceScripts();
                             MaintenanceStruct MA = null;
-                            XMLScripts.ProcessXMLMaintanenceInformation(ref MA, "", MaintanenceCommands.SkipOneMaintenanceCycle);
+                            XMLScripts.ProcessXMLMaintanenceInformation(ref MA, "", "",MaintanenceCommands.SkipOneMaintenanceCycle);
 
                             if (_PluginCommonFunctions.LocalDevicesByUnique.TryGetValue(PCS.DeviceUniqueID, out DV))
                             {
@@ -423,91 +480,101 @@ namespace CHMModules
                                     string QueryDelay = "";
                                     string CommandString = "";
 
-                                    if (string.IsNullOrEmpty(PCS.String2) && !string.IsNullOrEmpty(PCS.String3))
+                                    if ((string.IsNullOrEmpty(PCS.String2) && !string.IsNullOrEmpty(PCS.String3) || Value.PluginData.Command == PluginCommandsToPlugins.DirectCommand))
                                     {
                                         Doit = true;
                                         CommandString = PCS.String3;
                                     }
-
-                                    XmlDocument XML = new XmlDocument();
-                                    XML.LoadXml(DV.XMLConfiguration);
-                                    XmlNodeList CommandList = XML.SelectNodes("/root/commands/command");
-                                    if (CommandList.Count == 0)
-                                        CommandList = XML.SelectNodes("/commands/command");
-
-                                    foreach (XmlElement el in CommandList)
+                                    else
                                     {
-                                        string State = "", RangeStart = "", RangeEnd = "", SubField = "", Command = "";
-                                        QueryDelay ="";
-                                        for (int i = 0; i < el.Attributes.Count; i++)
+                                        XmlDocument XML = new XmlDocument();
+                                        XML.LoadXml(DV.XMLConfiguration);
+                                        XmlNodeList CommandList = XML.SelectNodes("/root/commands/command");
+                                        if (CommandList.Count == 0)
+                                            CommandList = XML.SelectNodes("/commands/command");
+
+                                        foreach (XmlElement el in CommandList)
                                         {
-                                            if (el.Attributes[i].Name.ToLower() == "state")
+                                            string State = "", RangeStart = "", RangeEnd = "", SubField = "", Command = "";
+                                            QueryDelay = "";
+                                            for (int i = 0; i < el.Attributes.Count; i++)
                                             {
-                                                State = el.Attributes[i].Value.ToLower();
-                                                continue;
-                                            }
-                                            if (el.Attributes[i].Name.ToLower() == "commandstring")
-                                            {
-                                                Command = el.Attributes[i].Value;
-                                                continue;
-                                            }
-                                            if (el.Attributes[i].Name.ToLower() == "rangestart")
-                                            {
-                                                RangeStart = el.Attributes[i].Value;
-                                                continue;
-                                            }
-                                            if (el.Attributes[i].Name.ToLower() == "rangeend")
-                                            {
-                                                RangeEnd = el.Attributes[i].Value;
-                                                continue;
+                                                if (el.Attributes[i].Name.ToLower() == "state")
+                                                {
+                                                    State = el.Attributes[i].Value.ToLower();
+                                                    continue;
+                                                }
+                                                if (el.Attributes[i].Name.ToLower() == "commandstring")
+                                                {
+                                                    Command = el.Attributes[i].Value;
+                                                    continue;
+                                                }
+                                                if (el.Attributes[i].Name.ToLower() == "rangestart")
+                                                {
+                                                    RangeStart = el.Attributes[i].Value;
+                                                    continue;
+                                                }
+                                                if (el.Attributes[i].Name.ToLower() == "rangeend")
+                                                {
+                                                    RangeEnd = el.Attributes[i].Value;
+                                                    continue;
+                                                }
+
+                                                if (el.Attributes[i].Name.ToLower() == "subfield")
+                                                {
+                                                    SubField = el.Attributes[i].Value;
+                                                    continue;
+                                                }
+
+                                                if (el.Attributes[i].Name.ToLower() == "querydelay")
+                                                {
+                                                    QueryDelay = el.Attributes[i].Value;
+                                                    continue;
+                                                }
                                             }
 
-                                            if (el.Attributes[i].Name.ToLower() == "subfield")
-                                            {
-                                                SubField = el.Attributes[i].Value;
+                                            if (!string.IsNullOrEmpty(SubField) && SubField.ToLower() != PCS.String5)
                                                 continue;
-                                            }
 
-                                            if (el.Attributes[i].Name.ToLower() == "querydelay")
-                                            {
-                                                QueryDelay = el.Attributes[i].Value;
+                                            if (State != PCS.String2.ToLower() && (RangeStart == "" || RangeEnd == ""))
                                                 continue;
+                                            if (string.IsNullOrEmpty(PCS.String3) && !string.IsNullOrEmpty(PCS.String2))
+                                            {
+                                                Doit = true;
+                                                CommandString = Command;
                                             }
+                                            break;
                                         }
-                                        if (State != PCS.String2.ToLower() && (RangeStart == "" || RangeEnd == ""))
-                                            continue;
-                                        if (string.IsNullOrEmpty(PCS.String3) && !string.IsNullOrEmpty(PCS.String2))
-                                        {
-                                            Doit = true;
-                                            CommandString = Command;
-                                        }
-                                        break;
                                     }
                                     if (Doit)
                                     {
-                                        string CMD = Regex.Replace(CommandString, "\\$\\$devnum", DV.NativeDeviceIdentifier, RegexOptions.IgnoreCase);
-                                        CMD = Regex.Replace(CMD, "\\$\\$newvalue", PCS.String2, RegexOptions.IgnoreCase);
-                                        PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
-                                        PCS2.Command = PluginCommandsToPlugins.PriorityProcessNow;
-                                        PCS2.DestinationPlugin = LinkPlugin;
-                                        PCS2.PluginReferenceIdentifier = LinkPluginReferenceIdentifier;
-                                        PCS2.SecureCommunicationIDCode = LinkPluginSecureCommunicationIDCode;
-                                        PCS2.OutgoingDS = new OutgoingDataStruct();
-                                        //                   PCSAquired.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[1];
-                                        PCS2.OutgoingDS.LocalIDTag = "Command";
-                                        PCS2.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[1];
-                                        PCS2.OutgoingDS.CommDataControlInfo[0].CharactersToSend = _PCF.ConvertStringToByteArray(CMD);
-                                        PCS2.OutgoingDS.CommDataControlInfo[0].Method = "Get";
-                                        PCS2.OutgoingDS.CommDataControlInfo[0].WaitForType = CommDataControlInfoStruct_WhatToWaitFor.Anything;
-                                        PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend = new WebHeaderCollection();
-                                        PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend.Add("Authorization", "Basic " + EncodedPassword);
-
-                                        if (DV.XMLConfiguration.IndexOf("BATLVL") == -1)//Not A battery Operated Device
+                                        if (!string.IsNullOrEmpty(CommandString))
                                         {
-                                            PCS2.OutgoingDS.LocalData= "http://$$IPAddress/rest/query/" + DV.NativeDeviceIdentifier;
-                                            PCS2.OutgoingDS.LocalData2 = QueryDelay;
+                                            string CMD = Regex.Replace(CommandString, "\\$\\$devnum", DV.NativeDeviceIdentifier, RegexOptions.IgnoreCase);
+                                            CMD = Regex.Replace(CMD, "\\$\\$newvalue", PCS.String2, RegexOptions.IgnoreCase);
+                                            PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
+                                            PCS2.Command = PluginCommandsToPlugins.PriorityProcessNow;
+                                            PCS2.DestinationPlugin = LinkPlugin;
+                                            PCS2.PluginReferenceIdentifier = LinkPluginReferenceIdentifier;
+                                            PCS2.SecureCommunicationIDCode = LinkPluginSecureCommunicationIDCode;
+                                            PCS2.OutgoingDS = new OutgoingDataStruct();
+                                            //                   PCSAquired.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[1];
+                                            PCS2.OutgoingDS.LocalIDTag = "Command";
+                                            PCS2.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[1];
+                                            PCS2.OutgoingDS.CommDataControlInfo[0].CharactersToSend = _PCF.ConvertStringToByteArray(CMD);
+                                            PCS2.OutgoingDS.CommDataControlInfo[0].Method = "Get";
+                                            PCS2.OutgoingDS.CommDataControlInfo[0].WaitForType = CommDataControlInfoStruct_WhatToWaitFor.Anything;
+                                            PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend = new WebHeaderCollection();
+                                            PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend.Add("Authorization", "Basic " + EncodedPassword);
+                                            SentCommands.TryAdd(CMD, new Tuple<DateTime, String, int>(_PluginCommonFunctions.CurrentTime, PCS2.OutgoingDS.LocalIDTag, 0));
+
+                                            if (DV.XMLConfiguration.IndexOf("BATLVL") == -1 && !DV.IsDeviceOffline)//Not A battery Operated Device or offline
+                                            {
+                                                PCS2.OutgoingDS.LocalData = "http://$$IPAddress/rest/query/" + DV.NativeDeviceIdentifier;
+                                                PCS2.OutgoingDS.LocalData2 = QueryDelay;
+                                            }
+                                            _PCF.QueuePluginInformationToPlugin(PCS2);
                                         }
-                                        _PCF.QueuePluginInformationToPlugin(PCS2);
                                     }
                                     continue;
                                 }
@@ -527,7 +594,13 @@ namespace CHMModules
                             DeviceStruct DV;
                             if (_PluginCommonFunctions.LocalDevicesByUnique.TryGetValue(PCS.DeviceUniqueID, out DV))
                             {
-                                Debug.WriteLine("maintenance: " + DV.NativeDeviceIdentifier);
+                                if(DV.OffLine.ToLower()=="y") //A Device Not in Current Use, so no maint command
+                                {
+                                    XMLDeviceScripts.UseMaintenanceFallbackTime();
+                                    continue;
+                                }
+
+                                //Debug.WriteLine("maintenance: " + DV.NativeDeviceIdentifier);
                                 string CMD = Regex.Replace(Value.PluginData.String3, "\\$\\$devnum", DV.NativeDeviceIdentifier, RegexOptions.IgnoreCase);
                                 CMD = Regex.Replace(CMD, "\\$\\$newvalue", PCS.String2, RegexOptions.IgnoreCase);
                                 PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
@@ -545,6 +618,7 @@ namespace CHMModules
                                 PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend = new WebHeaderCollection();
                                 PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend.Add("Authorization", "Basic " + EncodedPassword);
                                 _PCF.QueuePluginInformationToPlugin(PCS2);
+                                XMLDeviceScripts.UseMaintenanceFallbackTime();
                             }
                             continue;
                         }
@@ -723,6 +797,7 @@ namespace CHMModules
                                 PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend = new WebHeaderCollection();
                                 PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend.Add("Authorization", "Basic " + EncodedPassword);
                                 _PCF.QueuePluginInformationToPlugin(PCS2);
+
                             }
                             else
                             {
@@ -844,6 +919,8 @@ namespace CHMModules
                             PCS2.OutgoingDS.CommDataControlInfo[0].HeadersToSend.Add("Authorization", "Basic " + EncodedPassword);
 
                             _PCF.QueuePluginInformationToPlugin(PCS2);
+
+                            
                         }
                         else
                         {
@@ -929,7 +1006,8 @@ namespace CHMModules
             client.OnMessage += (sender, e) => WebSocketSharp_Notify(e);
             client.OnError += (sender, e) => WebSocketSharp_ErrorNotify(e);
             client.Connect();
-            WebSocketSharp_LastHeartbeat = _PluginCommonFunctions.CurrentTime.AddSeconds(-(_PCF.GetStartupField("MaxHeartbeatTime", 120)));
+            //WebSocketSharp_LastHeartbeat = _PluginCommonFunctions.CurrentTime.AddSeconds(-(_PCF.GetStartupField("MaxHeartbeatTime", 120)));
+            WebSocketSharp_LastHeartbeat = _PluginCommonFunctions.CurrentTime.AddSeconds(-((_PCF.GetStartupField("MaxHeartbeatTime", 120))/2));
         }
 
         static void WebSocketSharp_ErrorNotify(WebSocketSharp.ErrorEventArgs e)
@@ -952,6 +1030,7 @@ namespace CHMModules
                 XMLDeviceScripts XMLScripts = new XMLDeviceScripts();
                 //SubscribedInfo = new ConcurrentQueue<string>();
                 XmlDocument XML = new XmlDocument();
+//                Debug.WriteLine("ISY: "+message.Data);
                 XML.LoadXml(message.Data);
                 if (ISYFirstConnect)
                 {
@@ -974,6 +1053,7 @@ namespace CHMModules
                     }
 
                     _PluginCommonFunctions.GenerateLocalMessage(2000011, "", S);
+                    WebSocketSharp_LastHeartbeat = _PluginCommonFunctions.CurrentTime;
                 }
                 XmlNodeList ControlNode =XML.GetElementsByTagName("control");
                 if (ControlNode.Count == 1)
@@ -1002,11 +1082,13 @@ namespace CHMModules
 
                         if (_PluginCommonFunctions.LocalDevicesByDeviceIdentifier.TryGetValue(Node, out Device))
                         {
+                            Device.IsDeviceOffline = false;
                             if (!Device.Local_IsLocalDevice)
                             {
                                 XmlNodeList Lnodes = XML.SelectNodes("//*");
                                 foreach (XmlElement XM in Lnodes)
                                 {
+//                                    Debug.WriteLine("Node: " + Node + "/" + Device.NativeDeviceIdentifier +":"+ XM.Name+" "+XM.InnerText);
                                     switch (XM.Name)
                                     {
                                         case "control":
@@ -1035,6 +1117,7 @@ namespace CHMModules
                                             break;
                                     }
                                 }
+
                                 if (!string.IsNullOrEmpty(Control))
                                 {
                                     //Format Values
@@ -1066,13 +1149,51 @@ namespace CHMModules
                                             }
                                         }
                                     }
+                                    if (string.IsNullOrWhiteSpace(Value))
+                                    {
+                                        _PCF.GetCHMStartupField("UnknownName", out Value, "Unknown");
+                                        _PCF.GetCHMStartupField("UnknownName", out Formatted, "Unknown");
+
+                                    }
                                     string V = "<property id=\"" + Control + "\"  value=\"" + Value + "\" formatted=\"" + Formatted + "\"  uom=\"" + UOM + "\"/>";
+                                    Debug.WriteLine(V);
                                     XMLScripts.ProcessDeviceXMLScriptFromData(ref Device, V, XMLDeviceScripts.DeviceScriptsDataTypes.XML);
-                                    MaintenanceStruct MA=null;
-                                    XMLScripts.ProcessXMLMaintanenceInformation(ref MA, Device.NativeDeviceIdentifier, MaintanenceCommands.TaskSucessful);
+                                    MaintenanceStruct MA =null;
+                                    if (Control == "ST")
+                                    {
+                                        XMLScripts.ProcessXMLMaintanenceInformation(ref MA, Device.NativeDeviceIdentifier, "Status", MaintanenceCommands.TaskSucessful);
+                                    }
+                                    else
+                                    {
+                                        if (Device.StoredDeviceData != null)
+                                        {
+                                            foreach (FlagAttributes FlagAtt in Device.StoredDeviceData.Local_FlagAttributes)
+                                            {
+                                                int i;
+                                                string DataAttributeElementValue = "";
+                                                string MaintTransaction = "";
+                                                for (i = 0; i < FlagAtt.AttributeNames.Length; i++)
+                                                {
+                                                    switch (FlagAtt.AttributeNames[i])
+                                                    {
+                                                        case "dataattributelementevalue":
+                                                            DataAttributeElementValue = FlagAtt.AttributeValues[i];
+                                                            break;
 
+                                                        case "mainttransaction":
+                                                            MaintTransaction = FlagAtt.AttributeValues[i];
+                                                            break;
+                                                    }
 
-
+                                                }
+                                                //if (Control == DataAttributeElementValue && MaintTransaction == "complete")
+                                                //{
+                                                XMLScripts.ProcessXMLMaintanenceInformation(ref MA, Device.NativeDeviceIdentifier, "Status", MaintanenceCommands.TaskSucessful);
+                                                //    break;
+                                                //}
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

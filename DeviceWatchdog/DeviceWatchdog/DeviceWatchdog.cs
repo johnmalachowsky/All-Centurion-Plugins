@@ -48,7 +48,6 @@ namespace CHMModules
             ServerAccessFunctions._StartupInfoFromServer += StartupInfoEventHandler;
             ServerAccessFunctions._PluginStartupCompleted += PluginStartupCompleted;
             //            ServerAccessFunctions._IncedentFlag += IncedentFlagEventHandler;
-            ServerAccessFunctions._Command += CommandEvent;
             ServerAccessFunctions._PluginStartupInitialize += PluginStartupInitialize;
             ServerAccessFunctions._HTMLProcess += HTMLProcess;
             _PDBA = new _PluginDatabaseAccess(Path.GetFileNameWithoutExtension((System.Reflection.Assembly.GetExecutingAssembly().GetName().Name)));
@@ -56,12 +55,7 @@ namespace CHMModules
 
         }
 
-        private static void CommandEvent(ServerEvents WhichEvent, PluginEventArgs Value)
-        {
-
-        }
-
-          private static void PluginStartupInitialize(ServerEvents WhichEvent, PluginEventArgs Value)
+        private static void PluginStartupInitialize(ServerEvents WhichEvent, PluginEventArgs Value)
         {
             ServerAccessFunctions.PluginStatus.StartupInitializedFinished = false;
 

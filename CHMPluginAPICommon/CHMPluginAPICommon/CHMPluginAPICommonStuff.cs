@@ -54,9 +54,11 @@ namespace CHMPluginAPICommon
         public string Origin;
         public string AdditionalFlagName;
         public string HTMLDisplayName;
+        public string SpokenNames;
         public string AFUOMCode;
         public string DeviceGrouping;
         public string XMLConfiguration;
+        public string OffLine; //If 'Y', offline , If 'I' warning does not appear in the action list
         public string UndesignatedFieldsInfo;
         public int IntVal01;
         public int IntVal02;
@@ -76,6 +78,14 @@ namespace CHMPluginAPICommon
         public string Local_OriginalInfo;
         public string Local_CommandStatementIgnore;
         public DeviceDataStruct StoredDeviceData;
+        public int LocalIntVar01;
+        public int LocalIntVar02;
+        public int LocalIntVar03;
+        public string LocalStrVar01;
+        public string LocalStrVar02;
+        public string LocalStrVar03;
+        public DateTime LocalDateTime;
+        public bool IsDeviceOffline;
 
         //
         // Summary:
@@ -99,9 +109,11 @@ namespace CHMPluginAPICommon
             OD.Origin = this.Origin;
             OD.AdditionalFlagName = this.AdditionalFlagName;
             OD.HTMLDisplayName = this.HTMLDisplayName;
+            OD.SpokenNames = this.SpokenNames;
             OD.AFUOMCode = this.AFUOMCode;
             OD.DeviceGrouping = this.DeviceGrouping;
             OD.XMLConfiguration = this.XMLConfiguration;
+            OD.OffLine = this.OffLine;
             OD.UndesignatedFieldsInfo = this.UndesignatedFieldsInfo;
             OD.IntVal01 = this.IntVal01;
             OD.IntVal02 = this.IntVal02;
@@ -195,14 +207,23 @@ namespace CHMPluginAPICommon
     {
         public string DeviceUniqueID;
         public string URL;
+        public bool UseMaintanenceProcessing;
         public int FailInterval;
         public int NormalInterval;
+        public int StartDelay;
         public bool LastResult;
+        public int NumberofTimesToProcess;
+        public int TotalNumberOfTimesProcessed;
+        public int TotalNumberOfSuccessfullProcesses;
+        public int TotalNumberOfFailures;
         public string NativeDeviceIdentifer;
+        public string Task;
         public DateTime LastTime;
         public DateTime NextTime;
         public int NumberOfConsecutiveFails;
         public int NumberOfConsecutiveFailsForDeviceToBeOffline;
+        public bool UseHeartbeatProcessing;
+        public int HeartbeatTime;
 
     }
 
@@ -273,6 +294,8 @@ namespace CHMPluginAPICommon
         public string String2;
         public string String3;
         public string String4;
+        public string String5;
+        public string String6;
         public double Double;
         public String[] Strings;
         public String[] Strings2;
@@ -318,7 +341,8 @@ namespace CHMPluginAPICommon
         public object ReferenceObject2;
         public object ReferenceObject3;
         public object ReferenceObject4;
-
+        public bool Bool;
+        public bool Bool2;
     }
 
     public class SystemFlagStruct
@@ -351,6 +375,7 @@ namespace CHMPluginAPICommon
         public string Value;
         public string RawValue;
         public string ChangedBy;
+        public bool Archived;
     }
 
 
@@ -555,8 +580,9 @@ namespace CHMPluginAPICommon
     public enum FlagChangeCodes { Changeable = 0, NotChangeable, OwnerOnly };
     public enum HeartbeatTimeCode { Invalid, Nothing, NewSecond, NewMinute, NewHour, NewDay, NewWeek, NewMonth, NewYear }
     // public enum ServerEvents { Invalid, startup, flag, FlagComming, Heartbeat, TimeEvent, InformationCommingFromServer, InformationCommingFromPlugin, WatchdogProcess, CurrentServerStatus, ShutDownPlugin, StartupInfo, StartupInitialize, StartupCompleted, IncedentFlag, RequestedDBInfoReady, ProcessWordCommand };
-    public enum ServerEvents { Invalid, startup, Heartbeat, TimeEvent, InformationCommingFromServer, InformationCommingFromPlugin, WatchdogProcess, CurrentServerStatus, ShutDownPlugin, StartupInfo, StartupInitialize, StartupCompleted, IncedentFlag, RequestedDBInfoReady, ProcessWordCommand };
-    public enum ServerPluginCommands { Invalid, Accepted, Rejected, PluginSpecific, GeneralConfigInformation, ErrorMessage, GetEncryptionCode, AddDevice, GeneralMessage, LocalErrorMessage, LocalGeneralMesssage, SendAllIncedentFlags, DontSendAllIncedentFlags, SendJustFlagChangeIncedentFlags, DontSendJustFlagChangeIncedentFlags, AddRoom, GetDataBaseInfo, ProcessWordCommandCompleted, ProcessWordFlagCompleted, ProcessWordDisplayCompleted, AddToConfigurationInfo, UpdateDevice, DeleteDevice, AddActionItem, DeleteActionItem, AddPassword, DeviceIsOffline, DeviceIsOnline };
+//    public enum ServerEvents { Invalid, startup, Heartbeat, TimeEvent, InformationCommingFromServer, InformationCommingFromPlugin, WatchdogProcess, CurrentServerStatus, ShutDownPlugin, StartupInfo, StartupInitialize, StartupCompleted, IncedentFlag, RequestedDBInfoReady, ProcessWordCommand };
+    public enum ServerEvents { Invalid, Heartbeat, TimeEvent, InformationCommingFromServer, InformationCommingFromPlugin, WatchdogProcess, CurrentServerStatus, ShutDownPlugin, StartupCompleted, StartupInfo, StartupInitialize, IncedentFlag, RequestedDBInfoReady, ProcessWordCommand };
+    public enum ServerPluginCommands { Invalid, Accepted, Rejected, PluginSpecific, GeneralConfigInformation, ErrorMessage, GetEncryptionCode, AddDevice, GeneralMessage, LocalErrorMessage, LocalGeneralMesssage, SendAllIncedentFlags, DontSendAllIncedentFlags, SendJustFlagChangeIncedentFlags, DontSendJustFlagChangeIncedentFlags, AddRoom, GetDataBaseInfo, ProcessWordCommandCompleted, ProcessWordFlagCompleted, ProcessWordDisplayCompleted, ProcessWordMacroCompleted, ProcessMacroDeviceCommandCompleted, AddToConfigurationInfo, UpdateDevice, DeleteDevice, AddActionItem, DeleteActionItem, AddPassword, DeviceIsOffline};
     public enum PluginCommandsToPlugins { Invalid, PluginSpecific, RequestLink, LinkAccepted, LinkRejected, LinkedCommReady, CancelLink, ClearBufferAndProcessCommunication, WaitOnIncomingData, StopWaitOnIncomingData, StartTimedLoopForData, EndTimedLoopForData, TransactionComplete, TransactionFailed, SpontaniousDataReceived, DataLinkLost, DataLinkReestablished, GarbageData, ChangeIntervalLoopTime, DoLoopNow, ActionCompleted, ProcessCommunicationWOClearingBuffer, ProcessCommunicationAtTime, ProcessNext, PriorityProcessNow, TransactionFailedDueToPriorityCommand, ProcessCommandWords, DirectCommand, HTMLProcess, MaintanenceRequest};
     public enum PluginCommandsToPluginsHTMLSubCommands { StartHTMLSession }
     public enum PluginCommandsToPluginsAdendum { Invalid, None, TooManyRetries };
@@ -581,6 +607,8 @@ namespace CHMPluginAPICommon
         public int MaxHistoryToSave;
         public string ValidValues;
         public bool IsDeviceOffline;
+        public bool ChangeArchiveStatus;
+        public bool NewArchiveStatus;
 
     }
 
@@ -636,6 +664,8 @@ namespace CHMPluginAPICommon
 
     public class ServerFunctionsStruct
     {
+        //Don't Forget to add new delegates to Deep Copy Routine;
+
         public delegate Tuple<string, string, string>[] ServerGetFlagsInListDelegate(string[] FlagList);
         public ServerGetFlagsInListDelegate GetFlags;
 
@@ -648,8 +678,15 @@ namespace CHMPluginAPICommon
         public delegate string GetMacroDelegate(string MacroName, string MacroType, string MacroOwner);
         public GetMacroDelegate GetMacro;
 
+        public delegate Tuple<string, string, string> GetAutomationDelegate(string AutomationName, string AutomationType);
+        public GetAutomationDelegate GetAutomation;
+
         public delegate bool RunDirectCommandDelegate(ref PluginCommunicationStruct PCS, DeviceStruct DS);
         public RunDirectCommandDelegate RunDirectCommand;
+
+        public delegate bool GetDeviceFromDBDelegate(string UniqueID, ref DeviceStruct DS, ref RoomStruct Room);
+        public GetDeviceFromDBDelegate GetDeviceFromDB;
+
 
         public ServerFunctionsStruct DeepCopy()
         {
@@ -659,7 +696,9 @@ namespace CHMPluginAPICommon
             OD.GetSingleFlag = this.GetSingleFlag;
             OD.GetSingleFlagFromServerFull = this.GetSingleFlagFromServerFull;
             OD.GetMacro = this.GetMacro;
+            OD.GetAutomation = this.GetAutomation;
             OD.RunDirectCommand = this.RunDirectCommand;
+            OD.GetDeviceFromDB = this.GetDeviceFromDB;
 
             return (OD);
         }

@@ -64,7 +64,6 @@ namespace CHMModules
             ServerAccessFunctions._StartupInfoFromServer += StartupInfoEventHandler;
             ServerAccessFunctions._PluginStartupCompleted += PluginStartupCompleted;
 //            ServerAccessFunctions._IncedentFlag += IncedentFlagEventHandler;
-            ServerAccessFunctions._Command += CommandEvent;
             ServerAccessFunctions._PluginStartupInitialize += PluginStartupInitialize;
 
 
@@ -75,12 +74,7 @@ namespace CHMModules
         }
 
 
-        private static void CommandEvent(ServerEvents WhichEvent, PluginEventArgs Value)
-        {
-
-        }
-
-        
+       
         //private static void IncedentFlagEventHandler(ServerEvents WhichEvent, PluginEventArgs Value)
         //{
 
@@ -351,9 +345,6 @@ class ThreadedDataProcessing
             FlagActionCodes.addorupdate,
             "");
 
-        //if (Device.LogCode.ToLower() == "always")
-        //    CHMModules.DSCPower832.PluginCommonFunctions.LocalSaveLogs( _PluginCommonFunctions.Interfaces[0].InterfaceName, Device.DeviceName, StateValue, RawDisplay, Device);
-
         if (Device.AdditionalFlagName.Length > 0)
         {
             CHMModules.DSCPower832.PluginCommonFunctions.AddFlagForTransferToServer(
@@ -366,14 +357,13 @@ class ThreadedDataProcessing
                 FlagChangeCodes.OwnerOnly,
                 FlagActionCodes.addorupdate,
                 "");
-        //    if (Device.LogCode.ToLower() == "salways")
-        //        CHMModules.DSCPower832.PluginCommonFunctions.LocalSaveLogs(Device.AdditionalFlagName, "", StateValue, RawDisplay, Device);
         }
     }
 
     string ProcessPower832Data(string StatusMessageCode, string Command, string RawTrimmed, bool Logit)
     {
         string StatMessage="", StatMessageLog="";
+        bool ChangeArchiveStatus = false, NewArchiveStatus = false;
         if (_PluginCommonFunctions.LookupStatusDictionary(Command, out StatMessage, out StatMessageLog))
         {
 
@@ -382,7 +372,11 @@ class ThreadedDataProcessing
             {
                 if (_PluginCommonFunctions.LookupStatusDictionary(StatusMessageCode, out AlarmStatusStatusMessage, out AlarmStatusStatusMessageLog))
                 {
-
+                    if (CHMModules.DSCPower832.DeviceFlagStruct.DeviceIdentifier.ToLower()=="dsctemplate")
+                    {
+                        ChangeArchiveStatus = true;
+                        NewArchiveStatus = true;
+                    }
 
 
                     CHMModules.DSCPower832.PluginCommonFunctions.AddFlagForTransferToServer(
@@ -391,16 +385,15 @@ class ThreadedDataProcessing
                         StatMessage,
                         RawTrimmed,
                         CHMModules.DSCPower832.DeviceFlagStruct.RoomUniqueID,
-                        _PluginCommonFunctions.Interfaces[0].InterfaceUniqueID,
+                        _PluginCommonFunctions.LocalInterface.InterfaceUniqueID,
                         FlagChangeCodes.OwnerOnly,
                         FlagActionCodes.addorupdate,
-                        "");
+                        "",
+                        ChangeArchiveStatus,
+                        NewArchiveStatus);
                 }
             }
-            if (StatMessageLog.ToUpper() == "ALWAYS" && Logit)
-                CHMModules.DSCPower832.PluginCommonFunctions.LocalSaveLogs( _PluginCommonFunctions.Interfaces[0].InterfaceName, AlarmStatusStatusMessage, StatMessage, RawTrimmed, _PluginCommonFunctions.Interfaces[0]);
-
-        }
+         }
         return (StatMessage);
     }
 

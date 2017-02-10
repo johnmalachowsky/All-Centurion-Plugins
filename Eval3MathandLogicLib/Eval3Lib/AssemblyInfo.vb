@@ -10,7 +10,7 @@ Imports System.Runtime.InteropServices
 
 <Assembly: AssemblyTitle("Eval3")> 
 <Assembly: AssemblyDescription("An evaluation function for VB.net and C#")>
-<Assembly: AssemblyCompany("")>
+<Assembly: AssemblyCompany("Computers For Christ")>
 <Assembly: CLSCompliant(True)> 
 
 'The following GUID is for the ID of the typelib if this project is exposed to COM
@@ -19,3 +19,5 @@ Imports System.Runtime.InteropServices
 
 <Assembly: AssemblyVersion("1.0.*")>
 <Assembly: ComVisible(False)>
+<Assembly: AssemblyProduct("Centurion Home Monitor")>
+<Assembly: AssemblyCopyright("Copyright © Computers For Christ 2017")>

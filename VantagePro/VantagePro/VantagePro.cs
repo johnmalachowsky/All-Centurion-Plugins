@@ -24,7 +24,7 @@ namespace CHMModules
         internal static string LinkPlugin;
         internal static string LinkPluginReferenceIdentifier;
         internal static string LinkPluginSecureCommunicationIDCode;
-        internal static string LastDateSummaryArchived;
+//        internal static string LastDateSummaryArchived;
         private static bool FirstHeartbeat = true;
         private static bool StartupCompleteAndLinked = false;
         private static int HowManyWeatherValues;
@@ -65,7 +65,6 @@ namespace CHMModules
             ServerAccessFunctions._StartupInfoFromServer += StartupInfoEventHandler;
             ServerAccessFunctions._PluginStartupCompleted += PluginStartupCompleted;
 //            ServerAccessFunctions._IncedentFlag += IncedentFlagEventHandler;
-            ServerAccessFunctions._Command += CommandEvent;          
             return;
         }
 
@@ -74,11 +73,7 @@ namespace CHMModules
 
         //}
 
-        private static void CommandEvent(ServerEvents WhichEvent, PluginEventArgs Value)
-        {
-
-        }
-        
+       
 
         /// <summary>
         /// PluginStartupCompleted
@@ -100,12 +95,12 @@ namespace CHMModules
                     _VantageProDevices[(int)index].Room = PluginCommonFunctions.GetRoomFromUniqueID(SN.Value.RoomUniqueID);
                     index++;
                 }
-                String[] Values, FieldNames;
-                PluginDatabaseAccess.FindDatedRecord("VantageProArchive", _PluginCommonFunctions.Interfaces[0].InterfaceUniqueID, "", "", out Values, out FieldNames, _PluginDatabaseAccess.PluginDataLocationType.Newest);
-                if (Values == null || Values.Length == 0)
-                    LastDateSummaryArchived = "";
-                else
-                    LastDateSummaryArchived = Values[0];
+                //String[] Values, FieldNames;
+                //PluginDatabaseAccess.FindDatedRecord("VantageProArchive", _PluginCommonFunctions.Interfaces[0].InterfaceUniqueID, "", "", out Values, out FieldNames, _PluginDatabaseAccess.PluginDataLocationType.Newest);
+                //if (Values == null || Values.Length == 0)
+                //    LastDateSummaryArchived = "";
+                //else
+                //    LastDateSummaryArchived = Values[0];
 
             }
             catch (Exception CHMAPIEx)
@@ -153,33 +148,33 @@ namespace CHMModules
                     PCS.OutgoingDS.CommDataControlInfo[2].ReceiveDelayMiliseconds = ReceiveDelay;
                     PCS.OutgoingDS.MaxMilisecondsToWaitForIncommingData = 5000;
                     PCS.OutgoingDS.LocalIDTag = "SetTime";
-                    _PCF.QueuePluginInformationToPlugin(PCS);
+ //                   _PCF.QueuePluginInformationToPlugin(PCS);
 
                 }
 
                 if (FirstHeartbeat)
                 {
-                    PluginCommunicationStruct PCS = new PluginCommunicationStruct();
-                    PCS.Command = PluginCommandsToPlugins.ClearBufferAndProcessCommunication;
-                    PCS.DestinationPlugin = LinkPlugin;
-                    PCS.PluginReferenceIdentifier = LinkPluginReferenceIdentifier;
-                    PCS.SecureCommunicationIDCode = LinkPluginSecureCommunicationIDCode;
+                    //PluginCommunicationStruct PCS = new PluginCommunicationStruct();
+                    //PCS.Command = PluginCommandsToPlugins.ClearBufferAndProcessCommunication;
+                    //PCS.DestinationPlugin = LinkPlugin;
+                    //PCS.PluginReferenceIdentifier = LinkPluginReferenceIdentifier;
+                    //PCS.SecureCommunicationIDCode = LinkPluginSecureCommunicationIDCode;
 
-                    PCS.OutgoingDS = new OutgoingDataStruct();
-                    PCS.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[3];
+                    //PCS.OutgoingDS = new OutgoingDataStruct();
+                    //PCS.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[3];
 
-                    PCS.OutgoingDS.CommDataControlInfo[0].CharactersToSend = new Byte[] { (Byte)'\n' };
-                    PCS.OutgoingDS.CommDataControlInfo[0].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r' };
-                    PCS.OutgoingDS.CommDataControlInfo[0].ReceiveDelayMiliseconds = ReceiveDelay;
-                    PCS.OutgoingDS.CommDataControlInfo[1].CharactersToSend = new Byte[] { (Byte)'E', (Byte)'E', (Byte)'B', (Byte)'R', (Byte)'D', (Byte)' ', (Byte)'2', (Byte)'D', (Byte)' ', (Byte)'1', (Byte)'\n' };
-                    PCS.OutgoingDS.CommDataControlInfo[1].ResponseToWaitFor = new Byte[] { (Byte)'\x06' };
-                    PCS.OutgoingDS.CommDataControlInfo[1].ReceiveDelayMiliseconds = ReceiveDelay;
+                    //PCS.OutgoingDS.CommDataControlInfo[0].CharactersToSend = new Byte[] { (Byte)'\n' };
+                    //PCS.OutgoingDS.CommDataControlInfo[0].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r' };
+                    //PCS.OutgoingDS.CommDataControlInfo[0].ReceiveDelayMiliseconds = ReceiveDelay;
+                    //PCS.OutgoingDS.CommDataControlInfo[1].CharactersToSend = new Byte[] { (Byte)'E', (Byte)'E', (Byte)'B', (Byte)'R', (Byte)'D', (Byte)' ', (Byte)'2', (Byte)'D', (Byte)' ', (Byte)'1', (Byte)'\n' };
+                    //PCS.OutgoingDS.CommDataControlInfo[1].ResponseToWaitFor = new Byte[] { (Byte)'\x06' };
+                    //PCS.OutgoingDS.CommDataControlInfo[1].ReceiveDelayMiliseconds = ReceiveDelay;
 
-                    PCS.OutgoingDS.CommDataControlInfo[2].ReceiveDelayMiliseconds = ReceiveDelay;
-                    PCS.OutgoingDS.CommDataControlInfo[2].ReponseSizeToWaitFor = 1;
-                    PCS.OutgoingDS.MaxMilisecondsToWaitForIncommingData = 5000;
-                    PCS.OutgoingDS.LocalIDTag = "GetArchiveTime";
-                    _PCF.QueuePluginInformationToPlugin(PCS);
+                    //PCS.OutgoingDS.CommDataControlInfo[2].ReceiveDelayMiliseconds = ReceiveDelay;
+                    //PCS.OutgoingDS.CommDataControlInfo[2].ReponseSizeToWaitFor = 1;
+                    //PCS.OutgoingDS.MaxMilisecondsToWaitForIncommingData = 5000;
+                    //PCS.OutgoingDS.LocalIDTag = "GetArchiveTime";
+                    //_PCF.QueuePluginInformationToPlugin(PCS);
 
                     
                     PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
@@ -392,75 +387,75 @@ namespace CHMModules
                     }
 
 
-                    if (ODS.LocalIDTag == "ArchiveRecord")  //Archive Loop Time
-                    {
-                        TDP.ArchiveTimerRoutine(ODS);
-                        continue;
-                    }
+                //    if (ODS.LocalIDTag == "ArchiveRecord")  //Archive Loop Time
+                //    {
+                //        TDP.ArchiveTimerRoutine(ODS);
+                //        continue;
+                //    }
 
-                    if (ODS.LocalIDTag == "GetArchiveTime")  //Archive Loop Time
-                    {
-                        int ConsoleArchiveTimeset = ODS.CommDataControlInfo[2].ActualResponseReceived[0];
-                        int ConsoleArchiveInterval=PluginCommonFunctions.GetStartupField("ConsoleArchiveInterval", 5);
+                //    if (ODS.LocalIDTag == "GetArchiveTime")  //Archive Loop Time
+                //    {
+                //        int ConsoleArchiveTimeset = ODS.CommDataControlInfo[2].ActualResponseReceived[0];
+                //        int ConsoleArchiveInterval=PluginCommonFunctions.GetStartupField("ConsoleArchiveInterval", 5);
 
-                        int[] ValidValues = new int[] { 1, 5, 10, 15, 30, 60, 120 };
+                //        int[] ValidValues = new int[] { 1, 5, 10, 15, 30, 60, 120 };
 
-                        if (ConsoleArchiveTimeset != ConsoleArchiveInterval && Array.IndexOf(ValidValues, ConsoleArchiveInterval) != -1)
-                        {
-                            ConsoleArchiveTimeset = ConsoleArchiveInterval;
-                            PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
-                            PCS2.Command = PluginCommandsToPlugins.ClearBufferAndProcessCommunication;
-                            PCS2.DestinationPlugin = LinkPlugin;
-                            PCS2.PluginReferenceIdentifier = LinkPluginReferenceIdentifier;
-                            PCS2.SecureCommunicationIDCode = LinkPluginSecureCommunicationIDCode;
+                //        if (ConsoleArchiveTimeset != ConsoleArchiveInterval && Array.IndexOf(ValidValues, ConsoleArchiveInterval) != -1)
+                //        {
+                //            ConsoleArchiveTimeset = ConsoleArchiveInterval;
+                //            PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
+                //            PCS2.Command = PluginCommandsToPlugins.ClearBufferAndProcessCommunication;
+                //            PCS2.DestinationPlugin = LinkPlugin;
+                //            PCS2.PluginReferenceIdentifier = LinkPluginReferenceIdentifier;
+                //            PCS2.SecureCommunicationIDCode = LinkPluginSecureCommunicationIDCode;
 
-                            PCS2.OutgoingDS = new OutgoingDataStruct();
-                            PCS2.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[2];
+                //            PCS2.OutgoingDS = new OutgoingDataStruct();
+                //            PCS2.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[2];
 
-                            PCS2.OutgoingDS.CommDataControlInfo[0].CharactersToSend = new Byte[] { (Byte)'\n' };
-                            PCS2.OutgoingDS.CommDataControlInfo[0].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r' };
-                            PCS2.OutgoingDS.CommDataControlInfo[0].ReceiveDelayMiliseconds = ReceiveDelay;
-                            string S = "SETPER " + ConsoleArchiveInterval.ToString() + " \n";
-                            PCS2.OutgoingDS.CommDataControlInfo[1].CharactersToSend =  Encoding.ASCII.GetBytes(S);
-                            PCS2.OutgoingDS.CommDataControlInfo[1].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r', (Byte)'O', (Byte)'K', (Byte)'\n', (Byte)'\r' };
-                            PCS2.OutgoingDS.CommDataControlInfo[1].ReceiveDelayMiliseconds = ReceiveDelay;
-                            PCS2.OutgoingDS.MaxMilisecondsToWaitForIncommingData = 10000;
-                            PCS2.OutgoingDS.LocalIDTag = "SetArchiveTime";
-                            _PCF.QueuePluginInformationToPlugin(PCS2);
-                            continue;
-                        }
-                        else
-                        {
-                            ODS.LocalIDTag = "SetArchiveTime";
-                        }
-                    }
+                //            PCS2.OutgoingDS.CommDataControlInfo[0].CharactersToSend = new Byte[] { (Byte)'\n' };
+                //            PCS2.OutgoingDS.CommDataControlInfo[0].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r' };
+                //            PCS2.OutgoingDS.CommDataControlInfo[0].ReceiveDelayMiliseconds = ReceiveDelay;
+                //            string S = "SETPER " + ConsoleArchiveInterval.ToString() + " \n";
+                //            PCS2.OutgoingDS.CommDataControlInfo[1].CharactersToSend =  Encoding.ASCII.GetBytes(S);
+                //            PCS2.OutgoingDS.CommDataControlInfo[1].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r', (Byte)'O', (Byte)'K', (Byte)'\n', (Byte)'\r' };
+                //            PCS2.OutgoingDS.CommDataControlInfo[1].ReceiveDelayMiliseconds = ReceiveDelay;
+                //            PCS2.OutgoingDS.MaxMilisecondsToWaitForIncommingData = 10000;
+                //            PCS2.OutgoingDS.LocalIDTag = "SetArchiveTime";
+                //            _PCF.QueuePluginInformationToPlugin(PCS2);
+                //            continue;
+                //        }
+                //        else
+                //        {
+                //            ODS.LocalIDTag = "SetArchiveTime";
+                //        }
+                //    }
 
 
-                    if (ODS.LocalIDTag == "SetArchiveTime")  //Archive Loop Time
-                    {
-                        PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
-                        PCS2.Command = PluginCommandsToPlugins.ClearBufferAndProcessCommunication;
-                        PCS2.DestinationPlugin = LinkPlugin;
-                        PCS2.PluginReferenceIdentifier = LinkPluginReferenceIdentifier;
-                        PCS2.SecureCommunicationIDCode = LinkPluginSecureCommunicationIDCode;
+                //    if (ODS.LocalIDTag == "SetArchiveTime")  //Archive Loop Time
+                //    {
+                //        PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
+                //        PCS2.Command = PluginCommandsToPlugins.ClearBufferAndProcessCommunication;
+                //        PCS2.DestinationPlugin = LinkPlugin;
+                //        PCS2.PluginReferenceIdentifier = LinkPluginReferenceIdentifier;
+                //        PCS2.SecureCommunicationIDCode = LinkPluginSecureCommunicationIDCode;
 
-                        PCS2.OutgoingDS = new OutgoingDataStruct();
-                        PCS2.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[2];
+                //        PCS2.OutgoingDS = new OutgoingDataStruct();
+                //        PCS2.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[2];
 
-                        PCS2.OutgoingDS.CommDataControlInfo[0].CharactersToSend = new Byte[] { (Byte)'\n' };
-                        PCS2.OutgoingDS.CommDataControlInfo[0].ReceiveDelayMiliseconds = ReceiveDelay;
-                        PCS2.OutgoingDS.CommDataControlInfo[0].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r' };
-                        PCS2.OutgoingDS.CommDataControlInfo[1].CharactersToSend = new Byte[] { (Byte)'S', (Byte)'T', (Byte)'A', (Byte)'R', (Byte)'T', (Byte)'\n' };
-                        PCS2.OutgoingDS.CommDataControlInfo[1].ReceiveDelayMiliseconds = ReceiveDelay;
+                //        PCS2.OutgoingDS.CommDataControlInfo[0].CharactersToSend = new Byte[] { (Byte)'\n' };
+                //        PCS2.OutgoingDS.CommDataControlInfo[0].ReceiveDelayMiliseconds = ReceiveDelay;
+                //        PCS2.OutgoingDS.CommDataControlInfo[0].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r' };
+                //        PCS2.OutgoingDS.CommDataControlInfo[1].CharactersToSend = new Byte[] { (Byte)'S', (Byte)'T', (Byte)'A', (Byte)'R', (Byte)'T', (Byte)'\n' };
+                //        PCS2.OutgoingDS.CommDataControlInfo[1].ReceiveDelayMiliseconds = ReceiveDelay;
 
-                        PCS2.OutgoingDS.MaxMilisecondsToWaitForIncommingData = 5000;
-                        PCS2.OutgoingDS.LocalIDTag = "StartArchive";
-                        _PCF.QueuePluginInformationToPlugin(PCS2);
-                        ArchivingRunning = true;
+                //        PCS2.OutgoingDS.MaxMilisecondsToWaitForIncommingData = 5000;
+                //        PCS2.OutgoingDS.LocalIDTag = "StartArchive";
+                //        _PCF.QueuePluginInformationToPlugin(PCS2);
+                //        ArchivingRunning = true;
 
-                        TDP.ArchiveTimerRoutine(PCS2.OutgoingDS);
-                        continue;
-                    }
+                //        TDP.ArchiveTimerRoutine(PCS2.OutgoingDS);
+                //        continue;
+                //    }
                 }
 
                 if (Value.PluginData.Command == PluginCommandsToPlugins.GarbageData)
@@ -1222,163 +1217,163 @@ namespace CHMModules
             }
         }
 
-        internal void ArchiveTimerRoutine(OutgoingDataStruct ODS)
-        {
-            _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
-            string RecordDate, RecordTime;
-            DateTime EventTime;
+        //internal void ArchiveTimerRoutine(OutgoingDataStruct ODS)
+        //{
+        //    _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
+        //    string RecordDate, RecordTime;
+        //    DateTime EventTime;
 
-            RecordDate = "";
-            RecordTime = "";
+        //    RecordDate = "";
+        //    RecordTime = "";
 
-            if (ODS.LocalIDTag == "ArchiveRecord")  //Archive Loop Time
-            {
-                int f;
-                if (ODS.CommDataControlInfo[2].ActualResponseReceived.Length != 7 || ODS.CommDataControlInfo[3].ActualResponseReceived.Length != 267)
-                {
-                    _PluginCommonFunctions.GenerateErrorRecordLocalMessage(2000006, "", ODS.CommDataControlInfo[2].ActualResponseReceived.Length.ToString() + "-" + ODS.CommDataControlInfo[3].ActualResponseReceived.Length.ToString());
-                    return;
-                }
+        //    if (ODS.LocalIDTag == "ArchiveRecord")  //Archive Loop Time
+        //    {
+        //        int f;
+        //        if (ODS.CommDataControlInfo[2].ActualResponseReceived.Length != 7 || ODS.CommDataControlInfo[3].ActualResponseReceived.Length != 267)
+        //        {
+        //            _PluginCommonFunctions.GenerateErrorRecordLocalMessage(2000006, "", ODS.CommDataControlInfo[2].ActualResponseReceived.Length.ToString() + "-" + ODS.CommDataControlInfo[3].ActualResponseReceived.Length.ToString());
+        //            return;
+        //        }
 
-                for (int Record = ODS.CommDataControlInfo[2].ActualResponseReceived[3]; Record < 5; Record++)
-                {
-                    Byte[] ArcRecord = new Byte[52];
-                    Array.Copy(ODS.CommDataControlInfo[3].ActualResponseReceived, Record * 52 + 1, ArcRecord, 0, 52);
-                    for (int i = 0; i < VantagePro._VantageProDevices.Length; i++)
-                    {
-                        try
-                        {
-                            if (int.TryParse(VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Substring(3, 5), out f))
-                            {
-                                if (ProcessFlags(ref VantagePro._VantageProDevices[i], ArcRecord, "VPA", false))
-                                {
-                                    VantagePro._VantageProDevices[i].HasReceivedValidData = true;
-                                    if (VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Substring(VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Length - 2).ToUpper() == "AD")
-                                        RecordDate = VantagePro._VantageProDevices[i].CurrentValue;
-                                    if (VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Substring(VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Length - 2).ToUpper() == "AT")
-                                        RecordTime = VantagePro._VantageProDevices[i].CurrentValue;
-                                }
-                                else
-                                    VantagePro._VantageProDevices[i].HasReceivedValidData = false;
+        //        for (int Record = ODS.CommDataControlInfo[2].ActualResponseReceived[3]; Record < 5; Record++)
+        //        {
+        //            Byte[] ArcRecord = new Byte[52];
+        //            Array.Copy(ODS.CommDataControlInfo[3].ActualResponseReceived, Record * 52 + 1, ArcRecord, 0, 52);
+        //            for (int i = 0; i < VantagePro._VantageProDevices.Length; i++)
+        //            {
+        //                try
+        //                {
+        //                    if (int.TryParse(VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Substring(3, 5), out f))
+        //                    {
+        //                        if (ProcessFlags(ref VantagePro._VantageProDevices[i], ArcRecord, "VPA", false))
+        //                        {
+        //                            VantagePro._VantageProDevices[i].HasReceivedValidData = true;
+        //                            if (VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Substring(VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Length - 2).ToUpper() == "AD")
+        //                                RecordDate = VantagePro._VantageProDevices[i].CurrentValue;
+        //                            if (VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Substring(VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Length - 2).ToUpper() == "AT")
+        //                                RecordTime = VantagePro._VantageProDevices[i].CurrentValue;
+        //                        }
+        //                        else
+        //                            VantagePro._VantageProDevices[i].HasReceivedValidData = false;
 
-                            }
+        //                    }
 
-                        }
-                        catch
-                        {
+        //                }
+        //                catch
+        //                {
 
-                        }
-                    }
-                    try
-                    {
-                        if (string.IsNullOrEmpty(RecordDate) || string.IsNullOrEmpty(RecordTime))
-                            continue;
-                    }
-                    catch (Exception e)
-                    {
-                        _PluginCommonFunctions.GenerateErrorRecordLocalMessage(2000005, RecordDate + " " + RecordTime, e.Message);
-                        continue; //Date Error
-                    }
+        //                }
+        //            }
+        //            try
+        //            {
+        //                if (string.IsNullOrEmpty(RecordDate) || string.IsNullOrEmpty(RecordTime))
+        //                    continue;
+        //            }
+        //            catch (Exception e)
+        //            {
+        //                _PluginCommonFunctions.GenerateErrorRecordLocalMessage(2000005, RecordDate + " " + RecordTime, e.Message);
+        //                continue; //Date Error
+        //            }
 
 
-                    EventTime = new DateTime(
-                        int.Parse(RecordDate.Substring(0, 4)),
-                        int.Parse(RecordDate.Substring(5, 2)),
-                        int.Parse(RecordDate.Substring(8, 2)),
-                        int.Parse(RecordTime.Substring(0, 2)),
-                        int.Parse(RecordTime.Substring(3, 2)),
-                        int.Parse(RecordTime.Substring(6, 2)));
-                    for (int i = 0; i < VantagePro._VantageProDevices.Length; i++)
-                    {
-                        try
-                        {
-                            if (VantagePro._VantageProDevices[i].HasReceivedValidData && VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Substring(0, 3).ToUpper() == "VPA")
-                            {
-                                _PCF.NamedSaveLogs("VantageProArchive", VantagePro._VantageProDevices[i].Devices.DeviceName, "", VantagePro._VantageProDevices[i].CurrentValue, VantagePro._VantageProDevices[i].CurrentRaw, VantagePro._VantageProDevices[i].Devices, EventTime);
-                                VantagePro._VantageProDevices[i].HasReceivedValidData = false;
+        //            EventTime = new DateTime(
+        //                int.Parse(RecordDate.Substring(0, 4)),
+        //                int.Parse(RecordDate.Substring(5, 2)),
+        //                int.Parse(RecordDate.Substring(8, 2)),
+        //                int.Parse(RecordTime.Substring(0, 2)),
+        //                int.Parse(RecordTime.Substring(3, 2)),
+        //                int.Parse(RecordTime.Substring(6, 2)));
+        //            for (int i = 0; i < VantagePro._VantageProDevices.Length; i++)
+        //            {
+        //                try
+        //                {
+        //                    if (VantagePro._VantageProDevices[i].HasReceivedValidData && VantagePro._VantageProDevices[i].Devices.DeviceIdentifier.Substring(0, 3).ToUpper() == "VPA")
+        //                    {
+        //                        _PCF.NamedSaveLogs("VantageProArchive", VantagePro._VantageProDevices[i].Devices.DeviceName, "", VantagePro._VantageProDevices[i].CurrentValue, VantagePro._VantageProDevices[i].CurrentRaw, VantagePro._VantageProDevices[i].Devices, EventTime);
+        //                        VantagePro._VantageProDevices[i].HasReceivedValidData = false;
 
-                            }
-                        }
-                        catch
-                        {
-                        }
-                    }
-                    VantagePro.LastDateSummaryArchived = _PCF.SaveLogsDateFormat(EventTime);
-                }
+        //                    }
+        //                }
+        //                catch
+        //                {
+        //                }
+        //            }
+        //            VantagePro.LastDateSummaryArchived = _PCF.SaveLogsDateFormat(EventTime);
+        //        }
 
-            }
+        //    }
 
-            PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
-            PCS2.Command = PluginCommandsToPlugins.ProcessCommunicationAtTime;
-            PCS2.DestinationPlugin = VantagePro.LinkPlugin;
-            PCS2.PluginReferenceIdentifier = VantagePro.LinkPluginReferenceIdentifier;
-            PCS2.SecureCommunicationIDCode = VantagePro.LinkPluginSecureCommunicationIDCode;
+        //    PluginCommunicationStruct PCS2 = new PluginCommunicationStruct();
+        //    PCS2.Command = PluginCommandsToPlugins.ProcessCommunicationAtTime;
+        //    PCS2.DestinationPlugin = VantagePro.LinkPlugin;
+        //    PCS2.PluginReferenceIdentifier = VantagePro.LinkPluginReferenceIdentifier;
+        //    PCS2.SecureCommunicationIDCode = VantagePro.LinkPluginSecureCommunicationIDCode;
 
-            PCS2.OutgoingDS = new OutgoingDataStruct();
-            PCS2.OutgoingDS.NumberOfTimesToProcessCommunicationAtTime = 1;
-            if (ODS.LocalIDTag == "ArchiveRecord")
-                PCS2.OutgoingDS.SecondsBetweenProcessCommunicationAtTime = _PCF.GetStartupField("ConsoleArchiveInterval", 5) * 60;
-            else
-                PCS2.OutgoingDS.SecondsBetweenProcessCommunicationAtTime = 15; //First Time in Plugin
+        //    PCS2.OutgoingDS = new OutgoingDataStruct();
+        //    PCS2.OutgoingDS.NumberOfTimesToProcessCommunicationAtTime = 1;
+        //    if (ODS.LocalIDTag == "ArchiveRecord")
+        //        PCS2.OutgoingDS.SecondsBetweenProcessCommunicationAtTime = _PCF.GetStartupField("ConsoleArchiveInterval", 5) * 60;
+        //    else
+        //        PCS2.OutgoingDS.SecondsBetweenProcessCommunicationAtTime = 15; //First Time in Plugin
 
             
-            PCS2.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[5];
+        //    PCS2.OutgoingDS.CommDataControlInfo = new CommDataControlInfoStruct[5];
 
-            PCS2.OutgoingDS.LocalIDTag = "ArchiveRecord";
-            PCS2.OutgoingDS.CommDataControlInfo[0].CharactersToSend = new Byte[] { (Byte)'\n' };
-            PCS2.OutgoingDS.CommDataControlInfo[0].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r' };
-            PCS2.OutgoingDS.CommDataControlInfo[0].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
+        //    PCS2.OutgoingDS.LocalIDTag = "ArchiveRecord";
+        //    PCS2.OutgoingDS.CommDataControlInfo[0].CharactersToSend = new Byte[] { (Byte)'\n' };
+        //    PCS2.OutgoingDS.CommDataControlInfo[0].ResponseToWaitFor = new Byte[] { (Byte)'\n', (Byte)'\r' };
+        //    PCS2.OutgoingDS.CommDataControlInfo[0].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
 
-            PCS2.OutgoingDS.CommDataControlInfo[1].CharactersToSend = new Byte[] { (Byte)'D', (Byte)'M', (Byte)'P', (Byte)'A', (Byte)'F', (Byte)'T', (Byte)'\n' };
-            PCS2.OutgoingDS.CommDataControlInfo[1].ResponseToWaitFor = new Byte[] { (Byte)'\x06' };
-            PCS2.OutgoingDS.CommDataControlInfo[1].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
+        //    PCS2.OutgoingDS.CommDataControlInfo[1].CharactersToSend = new Byte[] { (Byte)'D', (Byte)'M', (Byte)'P', (Byte)'A', (Byte)'F', (Byte)'T', (Byte)'\n' };
+        //    PCS2.OutgoingDS.CommDataControlInfo[1].ResponseToWaitFor = new Byte[] { (Byte)'\x06' };
+        //    PCS2.OutgoingDS.CommDataControlInfo[1].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
 
-            if (string.IsNullOrEmpty(VantagePro.LastDateSummaryArchived))
-            {
-                //June 6, 2003 9:30am
-                int VantageDateStamp = 6 + (6 * 32) + ((2003 - 2000) * 512);
-                int VantageTimeStamp = (100 * 9) + 30;
+        //    if (string.IsNullOrEmpty(VantagePro.LastDateSummaryArchived))
+        //    {
+        //        //June 6, 2003 9:30am
+        //        int VantageDateStamp = 6 + (6 * 32) + ((2003 - 2000) * 512);
+        //        int VantageTimeStamp = (100 * 9) + 30;
 
-                Byte[] M = new Byte[4];
-                M[1] = (Byte)(VantageDateStamp / 256);
-                M[0] = (Byte)(VantageDateStamp - (M[1] * 256));
-                M[3] = (Byte)(VantageTimeStamp / 256);
-                M[2] = (Byte)(VantageTimeStamp - (M[3] * 256));
-                PCS2.OutgoingDS.CommDataControlInfo[2].CharactersToSend = CalculateCRC(M);
-            }
-            else
-            {
-                string S = VantagePro.LastDateSummaryArchived.Substring(8, 2) +
-                    VantagePro.LastDateSummaryArchived.Substring(5, 2) +
-                    VantagePro.LastDateSummaryArchived.Substring(0, 4);
+        //        Byte[] M = new Byte[4];
+        //        M[1] = (Byte)(VantageDateStamp / 256);
+        //        M[0] = (Byte)(VantageDateStamp - (M[1] * 256));
+        //        M[3] = (Byte)(VantageTimeStamp / 256);
+        //        M[2] = (Byte)(VantageTimeStamp - (M[3] * 256));
+        //        PCS2.OutgoingDS.CommDataControlInfo[2].CharactersToSend = CalculateCRC(M);
+        //    }
+        //    else
+        //    {
+        //        string S = VantagePro.LastDateSummaryArchived.Substring(8, 2) +
+        //            VantagePro.LastDateSummaryArchived.Substring(5, 2) +
+        //            VantagePro.LastDateSummaryArchived.Substring(0, 4);
 
-                String T = VantagePro.LastDateSummaryArchived.Substring(11, 2) +
-                    VantagePro.LastDateSummaryArchived.Substring(14, 2);
+        //        String T = VantagePro.LastDateSummaryArchived.Substring(11, 2) +
+        //            VantagePro.LastDateSummaryArchived.Substring(14, 2);
 
-                int VantageDateStamp = _PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(8, 2)) +
-                    (_PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(5, 2)) * 32) +
-                    ((_PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(0, 4)) - 2000) * 512);
-                int VantageTimeStamp = (100 * _PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(11, 2))) +
-                    _PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(14, 2));
+        //        int VantageDateStamp = _PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(8, 2)) +
+        //            (_PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(5, 2)) * 32) +
+        //            ((_PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(0, 4)) - 2000) * 512);
+        //        int VantageTimeStamp = (100 * _PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(11, 2))) +
+        //            _PCF.ConvertToInt32(VantagePro.LastDateSummaryArchived.Substring(14, 2));
 
-                Byte[] M = new Byte[4];
-                M[1] = (Byte)(VantageDateStamp / 256);
-                M[0] = (Byte)(VantageDateStamp - (M[1] * 256));
-                M[3] = (Byte)(VantageTimeStamp / 256);
-                M[2] = (Byte)(VantageTimeStamp - (M[3] * 256));
-                PCS2.OutgoingDS.CommDataControlInfo[2].CharactersToSend = CalculateCRC(M);
-            }
-            PCS2.OutgoingDS.CommDataControlInfo[2].ReponseSizeToWaitFor = 7;
-            PCS2.OutgoingDS.CommDataControlInfo[2].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
-            PCS2.OutgoingDS.CommDataControlInfo[3].CharactersToSend = new Byte[] { (Byte)'\x06' };
-            PCS2.OutgoingDS.CommDataControlInfo[3].ReponseSizeToWaitFor = 267;
-            PCS2.OutgoingDS.CommDataControlInfo[3].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
-            PCS2.OutgoingDS.CommDataControlInfo[4].CharactersToSend = new Byte[] { (Byte)'\x1B' };
-            PCS2.OutgoingDS.CommDataControlInfo[4].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
+        //        Byte[] M = new Byte[4];
+        //        M[1] = (Byte)(VantageDateStamp / 256);
+        //        M[0] = (Byte)(VantageDateStamp - (M[1] * 256));
+        //        M[3] = (Byte)(VantageTimeStamp / 256);
+        //        M[2] = (Byte)(VantageTimeStamp - (M[3] * 256));
+        //        PCS2.OutgoingDS.CommDataControlInfo[2].CharactersToSend = CalculateCRC(M);
+        //    }
+        //    PCS2.OutgoingDS.CommDataControlInfo[2].ReponseSizeToWaitFor = 7;
+        //    PCS2.OutgoingDS.CommDataControlInfo[2].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
+        //    PCS2.OutgoingDS.CommDataControlInfo[3].CharactersToSend = new Byte[] { (Byte)'\x06' };
+        //    PCS2.OutgoingDS.CommDataControlInfo[3].ReponseSizeToWaitFor = 267;
+        //    PCS2.OutgoingDS.CommDataControlInfo[3].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
+        //    PCS2.OutgoingDS.CommDataControlInfo[4].CharactersToSend = new Byte[] { (Byte)'\x1B' };
+        //    PCS2.OutgoingDS.CommDataControlInfo[4].ReceiveDelayMiliseconds = VantagePro.ReceiveDelay;
 
-            PCS2.OutgoingDS.MaxMilisecondsToWaitForIncommingData = 30000;
-            _PCF.QueuePluginInformationToPlugin(PCS2);
-        }
+        //    PCS2.OutgoingDS.MaxMilisecondsToWaitForIncommingData = 30000;
+        //    _PCF.QueuePluginInformationToPlugin(PCS2);
+        //}
     }
 }
 

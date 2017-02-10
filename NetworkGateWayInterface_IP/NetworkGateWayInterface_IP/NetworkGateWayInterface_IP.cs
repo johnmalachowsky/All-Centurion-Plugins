@@ -1,18 +1,6 @@
 ﻿using System;
-using System.IO;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Net;
 using System.Net.Sockets;
-using System.Collections.Specialized;
-using System.Threading.Tasks;
-using System.ComponentModel.Composition;
-using System.Diagnostics;
-using System.Collections.Concurrent;
-using System.Threading;
-using System.Xml;
-using System.Xml.Linq;
 using CHMPluginAPICommon;
 
 
@@ -85,6 +73,18 @@ namespace CHMModules
 
             try
             {
+                clientSocket.Close();
+            }
+            catch
+            {
+
+            }
+           clientSocket = new System.Net.Sockets.TcpClient();
+           LingerOption lingerOption = new LingerOption(true, 0);
+           clientSocket.LingerState = lingerOption;
+
+            try
+            {
                 LastError = new Exception();
                 if (!clientSocket.Connected)
                     clientSocket.Connect(_IPAddress, int.Parse(_Port));
@@ -101,6 +101,8 @@ namespace CHMModules
                 try
                 {
                     clientSocket = new System.Net.Sockets.TcpClient();
+                    lingerOption = new LingerOption(true, 0);
+                    clientSocket.LingerState = lingerOption;
                     clientSocket.Connect(_IPAddress, int.Parse(_Port));
                     serverStream = clientSocket.GetStream();
                     serverStream.ReadTimeout = ReceiveTimeout;

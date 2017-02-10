@@ -67,7 +67,6 @@ namespace CHMModules
             ServerAccessFunctions._StartupInfoFromServer += StartupInfoEventHandler;
             ServerAccessFunctions._PluginStartupCompleted += PluginStartupCompleted;
 //            ServerAccessFunctions._IncedentFlag += IncedentFlagEventHandler;
-            ServerAccessFunctions._Command += CommandEvent;
             ServerAccessFunctions._PluginStartupInitialize += PluginStartupInitialize;
 
 
@@ -78,10 +77,6 @@ namespace CHMModules
             return;
         }
 
-        private static void CommandEvent(ServerEvents WhichEvent, PluginEventArgs Value)
-        {
-
-        }
 
 
         private static void PluginStartupInitialize(ServerEvents WhichEvent, PluginEventArgs Value)

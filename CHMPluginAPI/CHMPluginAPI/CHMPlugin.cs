@@ -97,10 +97,13 @@ namespace CHMPluginAPI
         internal string ID;
         internal string Flag;
         internal string Case;
+        internal string LiteralCase;
         internal string Mode;
+        internal string LiteralMode;
         internal string Color;
         internal string Text;
         internal string TextColor;
+        internal string Default;
     }
 
     internal class DynamicHTMLDataStruct
@@ -113,6 +116,7 @@ namespace CHMPluginAPI
         internal string Literal;
         internal string Flag;
         internal bool NoFlagDisplay;
+        internal bool UseRawFlagValue;
         internal List<DynamicHTMLAttributes> DisplayAttributes;
     }
 
@@ -136,6 +140,7 @@ namespace CHMPluginAPI
         public PluginServerDataStruct ServerData;
         public PluginServerDataStruct OldServerData;
         public object Object;
+        public PluginIncedentFlags IncedentFlags;
 
     }
 
@@ -147,12 +152,6 @@ namespace CHMPluginAPI
         internal static event InformationCommingFromServerEventHandler _InformationCommingFromServerServerEvent;
         internal static event InformationCommingFromPluginEventHandler _InformationCommingFromPluginServerEvent;
         internal static event WatchdogProcess _WatchdogProcess;
-        internal static event IncedentFlag _IncedentFlag;
-        internal static event IncedentFlag __IncedentFlag;
-        internal static event IncedentFlag _Command;
-        internal static event IncedentFlag __Command;
-        internal static event ShutDownPlugin _ShutDownPlugin;
-        internal static event ShutDownPlugin __ShutDownPlugin;
         internal static event StartupInfoFromServer _StartupInfoFromServer;
         internal static event AddDBRecord _AddDBRecord;
         internal static event CurrentServerStatus _CurrentServerStatus;
@@ -160,8 +159,12 @@ namespace CHMPluginAPI
         internal static event PluginStartupCompleted __PluginStartupCompleted;
         internal static event PluginStartupInitialize _PluginStartupInitialize;
         internal static event PluginStartupInitialize __PluginStartupInitialize;
-        internal static event HTMLProcess __HTMLProcess;
+        internal static event IncedentFlag _IncedentFlag;
+         internal static event ShutDownPlugin _ShutDownPlugin;
+        internal static event ShutDownPlugin __ShutDownPlugin;
         internal static event HTMLProcess _HTMLProcess;
+        internal static event CommandEventHandler _Command;
+ 
 
         static internal ConcurrentQueue<PluginEventArgs> InformationCommingFromServerQueue;
         static internal ConcurrentQueue<PluginEventArgs> PluginInformationCommingFromPluginQueue;
@@ -170,18 +173,39 @@ namespace CHMPluginAPI
         static internal SemaphoreSlim InformationCommingFromServerSlim;
         static internal SemaphoreSlim PluginInformationCommingFromPluginSlim;
         static internal SemaphoreSlim IncedentFlagServerSlim;
-        static internal SemaphoreSlim CommandServerSlim;
         static internal SemaphoreSlim ProcessDeviceXMLScriptFromDataSlim;
+        static internal SemaphoreSlim MaintenanceProcessSlim;
 
         static internal ServerFunctionsStruct ServerFunctions;
 
         public static String PluginVersion, PluginSerialNumber, PluginDescription, PluginDataDirectory;
         public static PluginStatusStruct PluginStatus;
         internal static bool StartupComplete = false;
+        static private DateTime _StartupTime, _StartupCompletedTime;
+
 
         private static ConcurrentQueue<FlagArchiveStruct> ChangedFlags; 
 
         static private DeviceStruct[] Devices;
+
+        static internal DateTime StartupTime
+        {
+            get
+            {
+                return _StartupTime;
+            }
+
+        }
+
+        static internal DateTime StartupCompletedTime
+        {
+            get
+            {
+                return _StartupCompletedTime;
+            }
+
+        }
+
 
 
         internal static Tuple<string, string, string>[] GetFlagInListFromServer(string[] FlagValuesToGet)
@@ -199,81 +223,410 @@ namespace CHMPluginAPI
             return (ServerFunctions.GetSingleFlagFromServerFull(FlagValueToGet));
         }
 
-        internal static bool ProcessButtonMacro(FlagDataStruct Flag, string Macro)
+        internal static bool GetDeviceFromDB(string UniqueID, ref DeviceStruct DS, ref RoomStruct Room)
+        {
+            return (ServerFunctions.GetDeviceFromDB(UniqueID, ref DS, ref Room));
+        }
+
+        internal Tuple<string, string, string>[] GetListOfValidCommands(DeviceStruct DV)
         {
             _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
-            bool Resultb = false;
-            string MacroXML = ServerFunctions.GetMacro(Macro, "HTMLAction", "");
-            if (MacroXML == "")
-            {
-                return (false);
-            }
             XmlDocument XML = new XmlDocument();
-            XML.LoadXml(MacroXML);
-            XmlNodeList Macrolist = XML.SelectNodes("/macro/pushed");
-            int CommandsSent = 0;
-            foreach (XmlElement e in Macrolist)
+            PluginCommunicationStruct PCS = new PluginCommunicationStruct();
+            int ValidCommand = 0;
+            List<Tuple<string, string, string>> Values = new List<Tuple<string, string, string>>();
+
+            try
             {
-                string CurrentState = "", CommandString = "", CurrentStateMath = "", SetValue = "";
-                for (int i = 0; i < e.Attributes.Count; i++)
+                if (!string.IsNullOrEmpty(DV.XMLConfiguration))
                 {
-                    switch (e.Attributes[i].Name.ToLower())
+                    XML.LoadXml(DV.XMLConfiguration);
+                    XmlNodeList CommandList = XML.SelectNodes("/root/commands/command");
+                    if (CommandList.Count == 0)
+                        CommandList = XML.SelectNodes("/commands/command");
+
+                    bool RangeEqual = false;
+                    string SpecialRangeEqual = "";
+
+                    foreach (XmlElement el in CommandList)
                     {
-                        case "currentstate":
-                            CurrentState = e.Attributes[i].Value.ToLower();
-                            break;
+                        string State = "", SubField = null, RangeStart = "", RangeEnd = "", FlagValueToUse = "";
+                        for (int i = 0; i < el.Attributes.Count; i++)
+                        {
+                            if (el.Attributes[i].Name.ToLower() == "state")
+                            {
+                                State = el.Attributes[i].Value;
+                                ValidCommand = 2;
+                            }
 
-                        case "commandstring":
-                            CommandString = e.Attributes[i].Value;
-                            break;
+                            if (el.Attributes[i].Name.ToLower() == "subfield")
+                            {
+                                SubField = el.Attributes[i].Value.ToLower();
+                            }
 
-                        case "currentstatemath":
-                            CurrentStateMath = e.Attributes[i].Value;
-                            break;
+                            if (el.Attributes[i].Name.ToLower() == "rangestart")
+                            {
+                                RangeStart = el.Attributes[i].Value;
+                                ValidCommand++;
+                            }
 
-                        case "setvalue":
-                            SetValue = e.Attributes[i].Value;
-                            break;
+                            if (el.Attributes[i].Name.ToLower() == "rangeend")
+                            {
+                                RangeEnd = el.Attributes[i].Value;
+                                ValidCommand++;
+                            }
+
+                            if (el.Attributes[i].Name.ToLower() == "flagvaluetouse")
+                            {
+                                FlagValueToUse = el.Attributes[i].Value;
+                            }
+                        }
+
+                        if (RangeStart == RangeEnd && !string.IsNullOrEmpty(RangeStart))
+                        {
+                            RangeEqual = true;
+                            SpecialRangeEqual = RangeStart;
+                            continue;
+                        }
+
+                        if (ValidCommand >= 2) //A Valid Choice
+                        {
+                            if (RangeStart != "" && RangeEnd != "") //Range Value
+                            {
+                                int Minimum, Maximum;
+                                Minimum = _PCF.ConvertToInt32(RangeStart);
+                                Maximum = _PCF.ConvertToInt32(RangeEnd);
+                                if (RangeEqual)
+                                {
+                                    int r = _PCF.ConvertToInt32(SpecialRangeEqual);
+                                    if (r < Minimum)
+                                        Minimum = r;
+                                    if (r > Maximum)
+                                        Maximum = r;
+                                }
+
+                                for(int i=Minimum; i<=Maximum;i++)
+                                {
+                                    Values.Add(new Tuple<string, string, string>( i.ToString(), DV.DeviceUniqueID, SubField));
+                                }
+                            }
+                            else //fixed state
+                            {
+                                Values.Add(new Tuple<string, string, string>(State, DV.DeviceUniqueID, SubField));
+                            }
+                        }
                     }
                 }
-                if (!string.IsNullOrEmpty(CurrentStateMath))
+                else
                 {
-                    string Result;
-                    _PCF.DoMathEquations(CurrentStateMath, Flag.Value.ToLower(), Flag.RawValue.ToLower(), null, out Result);
-                    if (Result.ToLower() == "true")
-                    {
-                        Resultb = true;
-                    }
-
                 }
-
-
-                if (CurrentState == Flag.Value.ToLower() || Resultb)
-                {
-                    DeviceStruct Device;
-
-                    if (_PluginCommonFunctions.LocalDevicesByUnique.TryGetValue(Flag.SourceUniqueID, out Device))
-                    {
-                        PluginCommunicationStruct PCS = new PluginCommunicationStruct();
-
-                        PCS.Command = PluginCommandsToPlugins.DirectCommand;
-                        PCS.DeviceUniqueID = Flag.SourceUniqueID;
-
-                        PCS.String = Flag.Name;
-                        PCS.String2 = SetValue;
-                        PCS.String3 = CommandString;
-                        PCS.UniqueNumber = string.Format("{0:0000}-{1:0000000000}", _PCF.PluginIDCode, _PCF.NextSequence);
-                        PCS.OriginPlugin = ServerAccessFunctions.PluginSerialNumber;
-                        if (ServerFunctions.RunDirectCommand(ref PCS, Device))
-                            CommandsSent++;
-                    }
-
-                }
-
+                return (Values.ToArray());
             }
-            if (CommandsSent == 0)
+            catch
+            {
+                return (Values.ToArray());
+            }
+        }
+
+        internal bool GetAutomation(string AutomationName, string AutomationType, out Tuple<string, string, string> AutomationValues)
+        {
+            AutomationValues = ServerFunctions.GetAutomation(AutomationName, AutomationType);
+            if (AutomationValues == null)
                 return (false);
             return (true);
+        }
+
+
+        internal bool ProcessCommandMacro(string Macro, bool SendInfoToServer)
+        {
+            _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
+            try
+            {
+                string MacroXML = ServerFunctions.GetMacro(Macro, "Command", "");
+                if (MacroXML == "")
+                {
+                    return (false);
+                }
+                if (SendInfoToServer)
+                {
+                    PluginServerDataStruct PDS = new PluginServerDataStruct();
+                    PDS.Command = ServerPluginCommands.ProcessWordMacroCompleted;
+                    PDS.String = Macro;
+                    PDS.Bool = false;
+                    _PCF.QueuePluginInformationToServer(PDS);
+                }
+                XmlDocument XML = new XmlDocument();
+                XML.LoadXml(MacroXML);
+                XmlNodeList Macrolist = XML.SelectNodes("/macro");
+                int CommandsSent = 0;
+                foreach (XmlElement nl in Macrolist)
+                {
+                    foreach (XmlElement e in nl)
+                    {
+                        string type = e.Name.ToLower();
+                        string Name = "", Device = "", Command = "", Flag="";
+                        for (int i = 0; i < e.Attributes.Count; i++)
+                        {
+                            bool Resultb = false;
+                            switch (e.Attributes[i].Name.ToLower())
+                            {
+                                case "name":
+                                    Name = e.Attributes[i].Value;
+                                    break;
+
+                                case "device":
+                                    Device = e.Attributes[i].Value.ToLower();
+                                    break;
+
+                                case "command":
+                                    Command = e.Attributes[i].Value.ToLower();
+                                    break;
+
+                                case "flag":
+                                    Flag = e.Attributes[i].Value.ToLower();
+                                    break;
+                            }
+                        }
+
+                        if (type == "htmlaction")
+                        {
+                            FlagDataStruct FD;
+                            if (string.IsNullOrEmpty(Flag))
+                                FD = new FlagDataStruct();
+                            else
+                            {
+                                FD = ServerAccessFunctions.GetSingleFlagFromServerFull(Flag);
+                            }
+                            ProcessButtonMacro(FD, Name, SendInfoToServer);
+
+                        }
+                        if (type == "devicecommand")
+                        {
+                            DeviceStruct DV = null, DBN ;
+                            RoomStruct RM = new RoomStruct();
+                            if (_PluginCommonFunctions.LocalDevicesByName.TryGetValue(Device, out DBN))
+                            {
+                                if(ServerAccessFunctions.GetDeviceFromDB(DBN.DeviceUniqueID, ref DV, ref RM))
+                                {
+                                    InterfaceStruct IS  = Array.Find(_PluginCommonFunctions.Interfaces, c => c.InterfaceUniqueID == DBN.InterfaceUniqueID);
+                                    if(IS!=null)
+                                    {
+                                        PluginCommunicationStruct PCS = new PluginCommunicationStruct();
+                                        PCS.Command = PluginCommandsToPlugins.ProcessCommandWords;
+                                        PCS.DeviceUniqueID = DV.DeviceUniqueID;
+                                        PCS.String = DV.DeviceUniqueID;
+                                        PCS.String2 = Command;
+                                        PCS.String3 = "";
+                                        PCS.UniqueNumber = string.Format("{0:0000}-{1:0000000000}", _PCF.PluginIDCode, _PCF.NextSequence);
+                                        PCS.OriginPlugin = ServerAccessFunctions.PluginSerialNumber;
+                                        PCS.DestinationPlugin = IS.ControllingDLL;
+                                        ServerFunctions.RunDirectCommand(ref PCS, DV);
+                                        if (SendInfoToServer)
+                                        {
+                                            PluginServerDataStruct PDS = new PluginServerDataStruct();
+                                            PDS.ReferenceObject=(Tuple<string, string>) Tuple.Create(DV.DeviceUniqueID, Command);
+                                            PDS.Command = ServerPluginCommands.ProcessMacroDeviceCommandCompleted;
+                                            PDS.String = Macro;
+                                            PDS.String2 = Command;
+                                            PDS.Bool = false;
+                                            _PCF.QueuePluginInformationToServer(PDS);
+                                        }
+
+                                    }
+
+                                }
+                            }
+                        }
+                    }
+                }
+                return (true);
+            }
+            catch (Exception CHMAPIEx)
+            {
+                _PCF.AddToUnexpectedErrorQueue(CHMAPIEx);
+                return (false);
+            }
+        }
+
+        internal static bool ProcessButtonMacro(FlagDataStruct Flag, string Macro, bool SendInfoToServer)
+        {
+            return (ProcessButtonMacro(Flag, Macro, "", SendInfoToServer));
+        }
+
+        internal static bool ProcessButtonMacro(FlagDataStruct Flag, string Macro, string ReplacementValue, bool SendInfoToServer)
+        {
+            _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
+            try
+            {
+                string MacroXML = ServerFunctions.GetMacro(Macro, "HTMLAction", "");
+                if (MacroXML == "")
+                {
+                    return (false);
+                }
+
+                if (!string.IsNullOrEmpty(ReplacementValue))
+                {
+                    MacroXML = MacroXML.Replace("$$REPLACEVALUE", ReplacementValue);
+                }
+
+                XmlDocument XML = new XmlDocument();
+                XML.LoadXml(MacroXML);
+                XmlNodeList Macrolist = XML.SelectNodes("/macro/pushed");
+                int CommandsSent = 0;
+                foreach (XmlElement e in Macrolist)
+                {
+                    string NewValue="", CurrentState = "", CommandString = "", CurrentStateMath = "", SetValue = "", NewCurrentStateMath = "", FlagSetRawValue = "", FlagSetValue = "", TheFlag = "";
+                    bool Resultb = false;
+                    for (int i = 0; i < e.Attributes.Count; i++)
+                    {
+                        switch (e.Attributes[i].Name.ToLower())
+                        {
+                            case "currentstate":
+                                CurrentState = e.Attributes[i].Value.ToLower();
+                                break;
+
+                            case "commandstring":
+                                CommandString = e.Attributes[i].Value;
+                                break;
+
+                            case "currentstatemath":
+                                CurrentStateMath = e.Attributes[i].Value;
+                                break;
+
+                            case "setvalue":
+                                SetValue = e.Attributes[i].Value;
+                                break;
+
+                            case "newcurrentstatemath":
+                                NewCurrentStateMath = e.Attributes[i].Value;
+                                break;
+
+                            case "flagsetrawvalue":
+                                FlagSetRawValue = e.Attributes[i].Value;
+                                break;
+                            case "flagsetvalue":
+                                FlagSetValue = e.Attributes[i].Value;
+                                break;
+
+                            case "alwaysprocess":
+                               Resultb = true;
+                                break;
+
+                            case "flag":
+                                TheFlag= e.Attributes[i].Value;
+                                break;
+
+                            case "newvalue":
+                                NewValue = e.Attributes[i].Value;
+                                break;
+                        }
+                    }
+                    if(!string.IsNullOrEmpty(TheFlag))
+                    {
+                        Flag = ServerAccessFunctions.GetSingleFlagFromServerFull(TheFlag);
+                    }
+
+                    if (!string.IsNullOrEmpty(CurrentStateMath))
+                    {
+                        string Result;
+                        _PCF.DoMathEquations(CurrentStateMath, Flag.Value.ToLower(), Flag.RawValue.ToLower(), null, out Result);
+                        if (Result.ToLower() == "true")
+                        {
+                            Resultb = true;
+                        }
+
+                    }
+
+                    if (!string.IsNullOrEmpty(NewCurrentStateMath))
+                    {
+                        string Result;
+                        _PCF.DoMathEquations(NewCurrentStateMath, Flag.Value.ToLower(), Flag.RawValue.ToLower(), null, out Result);
+                        SetValue = Result;
+                    }
+
+
+                    if (Flag.Value != null)
+                    {
+                        if (CurrentState == Flag.Value.ToLower() || Resultb)
+                        {
+                            DeviceStruct Device;
+
+                            if (!string.IsNullOrEmpty(FlagSetRawValue) || !string.IsNullOrEmpty(FlagSetValue))//Direct Set of Flag
+                            {
+                                if (string.IsNullOrEmpty(FlagSetRawValue))
+                                    FlagSetRawValue = Flag.RawValue;
+
+                                if (string.IsNullOrEmpty(FlagSetValue))
+                                    FlagSetValue = Flag.Value;
+
+                                _PCF.AddFlagForTransferToServer(
+                                    Flag.Name,
+                                    Flag.SubType,
+                                    FlagSetValue,
+                                    FlagSetRawValue,
+                                    Flag.RoomUniqueID,
+                                    Flag.SourceUniqueID,
+                                    Flag.ChangeMode,
+                                    FlagActionCodes.addorupdate,
+                                    "");
+
+                                if (SendInfoToServer)
+                                {
+                                    PluginServerDataStruct PDS = new PluginServerDataStruct();
+                                    List <Tuple <string, string>> DC = new List<Tuple<string, string>>();
+                                    DC.Add(Tuple.Create(Flag.Name.Trim(), Flag.Value.Trim()));
+
+
+                                    PDS.ReferenceObject = DC;
+                                    PDS.Command = ServerPluginCommands.ProcessWordFlagCompleted;
+                                    PDS.String = Macro;
+                                    PDS.String2 = NewValue;
+                                    PDS.Bool = false;
+                                    _PCF.QueuePluginInformationToServer(PDS);
+                                }
+
+                            }
+
+                            if (_PluginCommonFunctions.LocalDevicesByUnique.TryGetValue(Flag.SourceUniqueID, out Device))
+                            {
+                                PluginCommunicationStruct PCS = new PluginCommunicationStruct();
+
+                                PCS.Command = PluginCommandsToPlugins.DirectCommand;
+                                PCS.DeviceUniqueID = Flag.SourceUniqueID;
+
+                                PCS.String = Flag.Name;
+                                PCS.String2 = SetValue;
+                                PCS.String3 = CommandString;
+                                PCS.UniqueNumber = string.Format("{0:0000}-{1:0000000000}", _PCF.PluginIDCode, _PCF.NextSequence);
+                                PCS.OriginPlugin = ServerAccessFunctions.PluginSerialNumber;
+                                if (ServerFunctions.RunDirectCommand(ref PCS, Device))
+                                    CommandsSent++;
+
+                                if (SendInfoToServer)
+                                {
+                                    PluginServerDataStruct PDS = new PluginServerDataStruct();
+                                    PDS.ReferenceObject = (Tuple<string, string>)Tuple.Create(Device.DeviceUniqueID, NewValue);
+                                    PDS.Command = ServerPluginCommands.ProcessMacroDeviceCommandCompleted;
+                                    PDS.String = Macro;
+                                    PDS.String2 = NewValue;
+                                    PDS.Bool = false;
+                                    _PCF.QueuePluginInformationToServer(PDS);
+                                }
+
+                            }
+
+                        }
+                    }
+                }
+                if (CommandsSent == 0)
+                    return (false);
+                return (true);
+            }
+            catch (Exception CHMAPIEx)
+            {
+                _PCF.AddToUnexpectedErrorQueue(CHMAPIEx);
+                return (false);
+            }
         }
 
 
@@ -302,13 +655,13 @@ namespace CHMPluginAPI
                 {
                     string S;
                     _PCF.GetCHMStartupField("FlagChangeHistoryMaxSize", out S, "1000");
-
+                    _PCF.GetCHMStartupField("OffLineName", out _PluginCommonFunctions._OffLineName, "Off-Line");
                     _PluginCommonFunctions.NumberOfFlagChangesToStore= _PCF.ConvertToInt32(S);
                 }
         
 
 
-                foreach (Tuple<string, string> RM in _PluginCommonFunctions.Rooms)
+                foreach (Tuple<string, string, string, string> RM in _PluginCommonFunctions.Rooms)
                 {
                     _PluginCommonFunctions.LocalRooms.Add(new Tuple<string, string, int>(RM.Item1, RM.Item2, -1));
                 }
@@ -328,6 +681,7 @@ namespace CHMPluginAPI
                     DeviceStruct DVX = DV.DeepCopy();
 
                     DVX.Local_TableLoc = -1;
+                    DVX.IsDeviceOffline = false;
                     XMLScripts.SetupXMLConfiguration(ref DVX);
                     DVX.Local_Flag1 = false;
                     _PluginCommonFunctions.AddLocalDevice(DVX);
@@ -389,34 +743,7 @@ namespace CHMPluginAPI
 
 
 
-        private static void ___Command(ServerEvents WhichEvent, PluginEventArgs Value)
-        {
-            try
-            {
-                PluginEventArgs e = new PluginEventArgs();
 
-                try
-                {
-                    if (_Command != null)
-                    {
-                        CommandServerSlim.Wait();
-                        _Command.Invoke(ServerEvents.ProcessWordCommand, e);
-                        CommandServerSlim.Release();
-                    }
-                }
-                catch (Exception CHMAPIEx)
-                {
-                    _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
-                    _PCF.AddToUnexpectedErrorQueue(CHMAPIEx);
-                }
-            }
-            catch (Exception CHMAPIEx)
-            {
-                _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
-                _PCF.AddToUnexpectedErrorQueue(CHMAPIEx);
-            }
-            return;
-        }
 
         private static void ___IncedentFlag(ServerEvents WhichEvent, PluginEventArgs Value)
         {
@@ -492,15 +819,16 @@ namespace CHMPluginAPI
 
                 PluginDataDirectory = PluginFileDirectory;
                 PluginCommonFunctions.ActivatePlugin(Uniqueid);
-                _PluginCommonFunctions._StartupTime = CT;
+                _StartupTime = CT;
                 InformationCommingFromServerQueue = new ConcurrentQueue<PluginEventArgs>();
                 PluginInformationCommingFromPluginQueue = new ConcurrentQueue<PluginEventArgs>();
                 FlagCommingFromServerQueue = new ConcurrentQueue<PluginEventArgs>();
                 InformationCommingFromServerSlim = new SemaphoreSlim(1, 1);
                 PluginInformationCommingFromPluginSlim = new SemaphoreSlim(1, 1);
                 IncedentFlagServerSlim = new SemaphoreSlim(1, 1);
-                CommandServerSlim = new SemaphoreSlim(1, 1);
-                ProcessDeviceXMLScriptFromDataSlim = new SemaphoreSlim(1, 1);
+                 ProcessDeviceXMLScriptFromDataSlim = new SemaphoreSlim(1, 1);
+                MaintenanceProcessSlim = new SemaphoreSlim(1, 1);
+
 
                 //throw new IndexOutOfRangeException();
                 ServerAccessFunctions.__PluginStartupCompleted += ___PluginStartupCompleted;
@@ -634,6 +962,7 @@ namespace CHMPluginAPI
         public bool CHMAPI_PluginStartupCompleted()
         {
             PluginEventArgs e = new PluginEventArgs();
+            _StartupCompletedTime = _PluginCommonFunctions.CurrentTime;
             __PluginStartupCompleted.BeginInvoke(ServerEvents.StartupCompleted, e, null, null);
             return (true);
 
@@ -642,7 +971,7 @@ namespace CHMPluginAPI
         public bool CHMAPI_HTMLProcess()
         {
             PluginEventArgs e = new PluginEventArgs();
-            __HTMLProcess.BeginInvoke(PluginEvents.ProcessWebpage, e, null, null);
+            _HTMLProcess.BeginInvoke(PluginEvents.ProcessWebpage, e, null, null);
             return (true);
 
         }
@@ -688,20 +1017,15 @@ namespace CHMPluginAPI
         public bool CHMAPI_IncedentFlag(PluginIncedentFlags IncFlag, Object IncedentObject)
         {
             PluginEventArgs e = new PluginEventArgs();
-            __IncedentFlag.BeginInvoke(ServerEvents.IncedentFlag, e, null, null);
+            e.Object = IncedentObject;
+            e.IncedentFlags = IncFlag;
+
+            _IncedentFlag.BeginInvoke(ServerEvents.IncedentFlag, e, null, null);
             return (true);
 
         }
 
-        public bool CHMAPI_ProcessCommand(CommandStruct CommandTo)
-        {
-            PluginEventArgs e = new PluginEventArgs();
-            __Command.BeginInvoke(ServerEvents.ProcessWordCommand, e, null, null);
-            return (true);
-
-        }
-
-        public bool CHMAPI_WatchdogProcess()
+         public bool CHMAPI_WatchdogProcess()
         {
             try
             {
@@ -731,11 +1055,11 @@ namespace CHMPluginAPI
             return (true);
         }
 
-        public bool CHMAPI_SetFlagOnServer(out NewFlagStruct Flag)
+        public bool CHMAPI_SetFlagOnServer(out NewFlagStruct Flag, out Tuple<string, string, DateTime> Events)
         {
             try
             {
-                return (PluginCommonFunctions.GetFlagFromQueue(out Flag));
+                return (PluginCommonFunctions.GetFlagFromQueue(out Flag, out Events));
             }
             catch (Exception CHMAPIEx)
             {
@@ -744,6 +1068,7 @@ namespace CHMPluginAPI
 
                 NewFlagStruct Lflag = new NewFlagStruct();
                 Flag = Lflag;
+                Events = new Tuple<string, string, DateTime>("", "", DateTime.MinValue);
                 return (false);
             }
         }
@@ -809,7 +1134,7 @@ namespace CHMPluginAPI
                     }
 
                     MaintenanceStruct MA = null;
-                    XMLScripts.ProcessXMLMaintanenceInformation(ref MA, "", MaintanenceCommands.DoTasks);
+                    XMLScripts.ProcessXMLMaintanenceInformation(ref MA, "", "", MaintanenceCommands.DoTasks);
 
 
 
@@ -911,9 +1236,13 @@ namespace CHMPluginAPI
                 try
                 {
                     Devices = (DeviceStruct[])Stuff[0];
-                    _PluginCommonFunctions.Rooms = new List<Tuple<string, string>>();
-                    _PluginCommonFunctions.Rooms.AddRange((Tuple<string, string>[])Stuff[1]);
+                    _PluginCommonFunctions.Rooms = new List<Tuple<string, string, string, string>>();
+                    _PluginCommonFunctions.Rooms.AddRange((Tuple<string, string, string, string>[])Stuff[1]);
                     _PluginCommonFunctions.Interfaces = (InterfaceStruct[])Stuff[2];
+                    string N = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name+".dll";
+                    _PluginCommonFunctions.LocalInterface = Array.Find(_PluginCommonFunctions.Interfaces, c => c.ControllingDLL == N);
+                    if (_PluginCommonFunctions.LocalInterface == null)
+                        _PluginCommonFunctions.LocalInterface = new InterfaceStruct();
                     _PluginCommonFunctions.Passwords = (PasswordStruct[])Stuff[3];
                     _PluginCommonFunctions.GenerateStatusDictionary((StatusMessagesStruct[])Stuff[9]);
                     _PluginCommonFunctions.DeviceTemplates = (DeviceTemplateStruct[])Stuff[10];
@@ -989,6 +1318,7 @@ namespace CHMPluginAPI
         static private int _PluginIDCode;
         static private DateTime _CurrentTime;
         static private ConcurrentQueue<NewFlagStruct> NewFlagQueue;
+        static private ConcurrentQueue<Tuple<string, string, DateTime>> EventsQueue;
         //static private ConcurrentDictionary<string, PluginFlagDataStruct> PluginFlagDataDictionary;
         static private ConcurrentQueue<PluginCommunicationStruct> PluginCommunicationQueue;
         static public ConcurrentDictionary<string, PluginCommunicationStruct> PluginCommunicationSentDictionary;
@@ -997,7 +1327,7 @@ namespace CHMPluginAPI
         static private ConcurrentQueue<PluginErrorMessage> PluginErrorMessageQueue;
 
         static private List<String[]> DBRecords;
-        static private string[] StartupFields, StartupValues, StartupSubFields;
+        static private List<Tuple<string, string, string>> StartupFields;
         static private string[] CHMStartupFields, CHMStartupValues, CHMStartupSubFields;
         static private int _SequenceVariable = 0;
         static private HeartbeatTimeCode _HeartbeatTimeCodeToInvoke = HeartbeatTimeCode.Nothing;
@@ -1010,11 +1340,11 @@ namespace CHMPluginAPI
         static internal StatusMessagesStruct[] StatusMessages;
         static internal SystemFlagStruct[] SystemFlags;
         static internal string DBPassword;
+        static internal InterfaceStruct LocalInterface;
         static internal SortedList<int, Tuple<string, string, string, Tuple<int, string>[]>> UOM;
-        static internal List<Tuple<string, string>> Rooms;
+        static internal List<Tuple<string, string, string, string>> Rooms;
         static internal readonly string FlagDateTimeFormat = "{0:0000}:{1:00}:{2:00} {3:00}:{4:00}:{5:00}";
         static internal ConcurrentDictionary<String, StatusMessagesStruct> StatusMessagesDictionary;
-        static internal DateTime _StartupTime;
         static internal Random random = new Random((int)DateTime.Now.Ticks);
         internal static ConcurrentDictionary<string, DeviceStruct> LocalDevicesByDeviceIdentifier;
         internal static ConcurrentDictionary<string, DeviceStruct> LocalDevicesByUnique;
@@ -1030,6 +1360,7 @@ namespace CHMPluginAPI
         static private object Instance = null;
         static private Type ServerAssemblyType = null;
         static private object ServerInstance = null;
+        static internal string _OffLineName;
 
 
         static private Dictionary<string, string> _UserVariables;
@@ -1042,8 +1373,7 @@ namespace CHMPluginAPI
             internal DeviceStruct Device;
         }
         static internal ConcurrentDictionary<DateTime, FlagResetStruct> FlagsNeedingReset;
-        static internal SortedDictionary<DateTime, string> MaintenanceRequests;
-        static internal Dictionary<string, MaintenanceStruct> MaintenanceRequestsByNativeID;
+        static internal SortedDictionary<DateTime, MaintenanceStruct> MaintenanceRequests;
 
         public Eval3.EvalVariable flagvalue_;
         public Eval3.EvalVariable rawvalue_;
@@ -1521,15 +1851,6 @@ namespace CHMPluginAPI
             return (false);
         }
 
-        internal DateTime StartupTime
-        {
-            get
-            {
-                return (_StartupTime);
-            }
-
-        }
-
         static internal int CountNumberOfUEErrorsQueue
         {
             get
@@ -1674,6 +1995,7 @@ namespace CHMPluginAPI
             try
             {
                 NewFlagQueue = new ConcurrentQueue<NewFlagStruct>();
+                EventsQueue = new ConcurrentQueue<Tuple<string, string, DateTime>>();
                 // PluginFlagDataDictionary = new ConcurrentDictionary<string, PluginFlagDataStruct>();
                 PluginCommunicationQueue = new ConcurrentQueue<PluginCommunicationStruct>();
                 PluginCommunicationSentDictionary = new ConcurrentDictionary<string, PluginCommunicationStruct>();
@@ -1686,10 +2008,8 @@ namespace CHMPluginAPI
                 DBRecords = new List<String[]>();
                 _UserVariables = new Dictionary<string, string>();
                 _PluginCommonFunctions.FlagsNeedingReset = new ConcurrentDictionary<DateTime, FlagResetStruct>();
-                _PluginCommonFunctions.MaintenanceRequests = new SortedDictionary<DateTime, string>();
-                _PluginCommonFunctions.MaintenanceRequestsByNativeID = new Dictionary<string, MaintenanceStruct>();
+                _PluginCommonFunctions.MaintenanceRequests = new SortedDictionary<DateTime, MaintenanceStruct>();
                 _PluginIDCode = UniqueID;
-
             }
             catch (Exception CHMAPIEx)
             {
@@ -1700,21 +2020,19 @@ namespace CHMPluginAPI
             return (UniqueID);
         }
 
+ 
         internal int _LoadStartupFields(string[] FieldName, string[] SubField, string[] FieldValue)
         {
             try
             {
                 if (FieldName == null)
                     return (0);
-                StartupFields = new String[FieldName.Length];
-                StartupValues = new String[FieldValue.Length];
-                StartupSubFields = new String[SubField.Length];
-
+                StartupFields = new List<Tuple<string, string, string>>();
+ 
                 int Size = Math.Min(FieldName.Length, FieldValue.Length);
                 for (int i = 0; i < Size; i++)
                 {
-                    StartupFields[i] = FieldName[i];
-                    StartupValues[i] = FieldValue[i];
+                    StartupFields.Add(new Tuple<string, string, string>(FieldName[i], SubField[i], FieldValue[i]));
                 }
                 return (Size);
             }
@@ -1764,6 +2082,14 @@ namespace CHMPluginAPI
             }
         }
 
+        internal string OffLineName
+        {
+            get
+            {
+                return _OffLineName;
+            }
+        }
+
 
         internal HeartbeatTimeCode HeartbeatTimeCodeToInvoke
         {
@@ -1796,6 +2122,24 @@ namespace CHMPluginAPI
             }
         }
 
+        static internal DateTime StartupTime
+        {
+            get
+            {
+                return ServerAccessFunctions.StartupTime;
+            }
+
+        }
+
+        static internal DateTime StartupCompletedTime
+        {
+            get
+            {
+                return ServerAccessFunctions.StartupCompletedTime;
+            }
+
+        }
+
 
         internal bool GetDBRecord(int Which, out string[] Record)
         {
@@ -1821,7 +2165,21 @@ namespace CHMPluginAPI
 
         }
 
+        internal bool AddEventForTransferToServer(string Name, string Value, DateTime TimeCode)
+        {
+            EventsQueue.Enqueue(new Tuple<string, string, DateTime>(Name, Value, TimeCode));
+            ServerAccessFunctions.PluginStatus.SetFlag = true;
+            return (true);
+
+        }
+
         internal bool AddFlagForTransferToServer(string Name, string SubType, string Value, string RawValue, string RoomUniqueID, string DeviceUniqueID, FlagChangeCodes ChangeCode, FlagActionCodes Operation, string UOM)
+        {
+            return (AddFlagForTransferToServer(Name, SubType, Value, RawValue, RoomUniqueID, DeviceUniqueID, ChangeCode, Operation, UOM, false, false));
+        }
+
+
+        internal bool AddFlagForTransferToServer(string Name, string SubType, string Value, string RawValue, string RoomUniqueID, string DeviceUniqueID, FlagChangeCodes ChangeCode, FlagActionCodes Operation, string UOM, bool ChangeArchiveStatus, bool NewArchiveStatus)
         {
             try
             {
@@ -1837,6 +2195,8 @@ namespace CHMPluginAPI
                 FlagToSave.SourceUniqueID = DeviceUniqueID;
                 FlagToSave.UOM = UOM;
                 FlagToSave.MaxHistoryToSave = NumberOfFlagChangesToStore;
+                FlagToSave.ChangeArchiveStatus = ChangeArchiveStatus;
+                FlagToSave.NewArchiveStatus = NewArchiveStatus;
                 NewFlagQueue.Enqueue(FlagToSave);
                 ServerAccessFunctions.PluginStatus.SetFlag = true;
                 return (true);
@@ -1863,6 +2223,9 @@ namespace CHMPluginAPI
                 FlagToSave.Type = ChangeCode;
                 FlagToSave.Operation = Operation;
                 FlagToSave.MaxHistoryToSave = NumberOfFlagChangesToStore;
+                FlagToSave.ChangeArchiveStatus = false; 
+                FlagToSave.NewArchiveStatus = false;
+
                 NewFlagQueue.Enqueue(FlagToSave);
                 ServerAccessFunctions.PluginStatus.SetFlag = true;
                 return (true);
@@ -1876,12 +2239,13 @@ namespace CHMPluginAPI
 
         }
 
-        internal bool GetFlagFromQueue(out NewFlagStruct Flag)
+        internal bool GetFlagFromQueue(out NewFlagStruct Flag, out Tuple<string, string, DateTime> Event)
         {
             try
             {
                 bool flag = NewFlagQueue.TryDequeue(out Flag);
-                ServerAccessFunctions.PluginStatus.SetFlag = !NewFlagQueue.IsEmpty;
+                bool flag2 = EventsQueue.TryDequeue(out Event);
+                ServerAccessFunctions.PluginStatus.SetFlag = !NewFlagQueue.IsEmpty && !EventsQueue.IsEmpty;
                 return (flag);
 
             }
@@ -1890,6 +2254,7 @@ namespace CHMPluginAPI
                 _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
                 _PCF.AddToUnexpectedErrorQueue(CHMAPIEx);
                 Flag = new NewFlagStruct();
+                Event = new Tuple<string, string, DateTime>("","",DateTime.MinValue);
                 return (false);
             }
         }
@@ -1963,14 +2328,14 @@ namespace CHMPluginAPI
                     return (false);
                 }
 
-                int i = Array.IndexOf(StartupFields, FieldName);
-                if (i == -1)
+                var value = StartupFields.Find(item => item.Item1 == FieldName);
+                if(value==null)
                 {
                     Value = "";
                     return (false);
                 }
 
-                Value = StartupValues[i];
+                Value = value.Item3;
                 return (true);
 
             }
@@ -2038,14 +2403,15 @@ namespace CHMPluginAPI
         {
             try
             {
-                Fields = new string[StartupFields.GetLength(0)];
-                Values = new string[StartupValues.GetLength(0)];
+                Fields = new string[StartupFields.Count];
+                Values = new string[StartupFields.Count];
 
-                StartupFields.CopyTo(Fields, 0);
-                StartupValues.CopyTo(Values, 0);
-
-                return (StartupFields.GetLength(0));
-
+                for(int i=0;i< StartupFields.Count;i++)
+                {
+                    Fields[i] = StartupFields[i].Item1;
+                    Values[i] = StartupFields[i].Item3;
+                }
+                return (StartupFields.Count);
             }
             catch (Exception CHMAPIEx)
             {
@@ -2093,9 +2459,27 @@ namespace CHMPluginAPI
 
         internal void AddOrUpdateConfigurationInformation(string FieldName, string SubField, String Value, String ValueType)
         {
-            //todo    Don't forget to Update Local Values
+            PluginServerDataStruct PDS = new PluginServerDataStruct();
+            PDS.ReferenceObject = new Tuple<string, string, string, string>(FieldName,  SubField,  Value,  ValueType);
+            PDS.UniqueNumber = ServerAccessFunctions.PluginSerialNumber + string.Format("-{0:0000000000}", UniqueNumber);
+            PDS.Command = ServerPluginCommands.AddToConfigurationInfo;
+            PDS.Plugin = ServerAccessFunctions.PluginSerialNumber;
+            ServerCommunicationQueue.Enqueue(PDS);
+            ServerAccessFunctions.PluginStatus.ToServer = true;
 
+            string S;
+            if (GetStartupField(FieldName, out S))
+            {
+                int v = StartupFields.FindIndex(item => item.Item1 == FieldName);
+                if (v > -1)
+                {
+                    StartupFields.RemoveAt(v);
+                }
+            }
+            StartupFields.Add(new Tuple<string, string, string>(FieldName, SubField, Value));
+            return;
         }
+
         internal void AddNewDevice(DeviceStruct DVS)
         {
             PluginServerDataStruct PDS = new PluginServerDataStruct();
@@ -2130,6 +2514,54 @@ namespace CHMPluginAPI
             PDS.Plugin = ServerAccessFunctions.PluginSerialNumber;
             ServerCommunicationQueue.Enqueue(PDS);
             ServerAccessFunctions.PluginStatus.ToServer = true;
+        }
+
+        internal void TakeDeviceOffLine(string DeviceUniqueID)
+        {
+            PluginServerDataStruct PDS = new PluginServerDataStruct();
+            PDS.String = DeviceUniqueID;
+            PDS.UniqueNumber = ServerAccessFunctions.PluginSerialNumber + string.Format("-{0:0000000000}", UniqueNumber);
+            PDS.Command = ServerPluginCommands.DeviceIsOffline;
+            PDS.Plugin = ServerAccessFunctions.PluginSerialNumber;
+            ServerCommunicationQueue.Enqueue(PDS);
+            ServerAccessFunctions.PluginStatus.ToServer = true;
+
+            //Now We Set THe Device Information to Off-Line
+            DeviceStruct Device;
+            if (_PluginCommonFunctions.LocalDevicesByUnique.TryGetValue(DeviceUniqueID, out Device))
+            {
+
+                try
+                {
+                    Device.IsDeviceOffline = true;
+                    foreach (FlagAttributes FlagAtt in Device.StoredDeviceData.Local_FlagAttributes)
+                    {
+                        int i;
+                        for (i = 0; i < Device.StoredDeviceData.Local_RawValueCurrentStates.Length; i++)
+                        {
+                            if (OffLineName != (string)Device.StoredDeviceData.Local_RawValueCurrentStates[i])
+                            {
+                                Device.StoredDeviceData.Local_RawValueLastStates[i] = Device.StoredDeviceData.Local_RawValueCurrentStates[i];
+                                Device.StoredDeviceData.Local_RawValueCurrentStates[i] = OffLineName;
+                                Device.StoredDeviceData.Local_RawValues.Add(new Tuple<DateTime, string>(CurrentTime, OffLineName));
+                            }
+
+                            if (OffLineName != (string)Device.StoredDeviceData.Local_FlagValueCurrentStates[i])
+                            {
+                                Device.StoredDeviceData.Local_FlagValueLastStates[i] = Device.StoredDeviceData.Local_FlagValueCurrentStates[i];
+                                Device.StoredDeviceData.Local_FlagValueCurrentStates[i] = OffLineName;
+                            }
+
+                        }
+                    }
+                }
+                catch (Exception CHMAPIEx)
+                {
+                    _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
+                    _PCF.AddToUnexpectedErrorQueue(CHMAPIEx);
+                }
+            }
+
         }
 
         internal void DeleteDevice(DeviceStruct DVS)
@@ -2285,7 +2717,7 @@ namespace CHMPluginAPI
 
             try
             {
-                Tuple<string, string> RM = _PluginCommonFunctions.Rooms.Find(c => c.Item1 == UniqueID);
+                Tuple<string, string, string, string> RM = _PluginCommonFunctions.Rooms.Find(c => c.Item1 == UniqueID);
 
                 if (string.IsNullOrEmpty(RM.Item2))
                     return ("");
@@ -2714,11 +3146,25 @@ namespace CHMPluginAPI
         static private bool DoMaintenance = false;
         static DateTime LastMaintTime;
         public enum DeviceScriptsDataTypes { NoData, Json, XML };
+        static internal SemaphoreSlim ProcessXMLMaintanenceInformationSlim;
+        static private bool _UseMaintenanceFallbackTime = false;
+
+
+        static internal void UseMaintenanceFallbackTime()
+        {
+            _UseMaintenanceFallbackTime = true;
+        }
+
+        static internal void UseNormalMaintenanceTime()
+        {
+            _UseMaintenanceFallbackTime = false;
+        }
 
         static internal void StartMaintenance()
         {
             LastMaintTime = _PluginCommonFunctions.CurrentTime;
             DoMaintenance = true;
+            ProcessXMLMaintanenceInformationSlim = new SemaphoreSlim(1);
         }
 
         static internal void StopMaintenance()
@@ -2838,11 +3284,12 @@ namespace CHMPluginAPI
                     return (false);
                 }
 
-                try //Maintenance
+
+                try //heartbeat
                 {
-                    XmlNodeList MaintList = XML.SelectNodes("/root/maintenance/command");
+                    XmlNodeList MaintList = XML.SelectNodes("/root/maintenance/heartbeat");
                     if (MaintList.Count == 0)
-                        MaintList = XML.SelectNodes("/maintenance/command");
+                        MaintList = XML.SelectNodes("/maintenance/heartbeat");
 
                     foreach (XmlElement e in MaintList)
                     {
@@ -2857,8 +3304,62 @@ namespace CHMPluginAPI
                         MA.NumberOfConsecutiveFailsForDeviceToBeOffline = 0;
                         MA.DeviceUniqueID = Device.DeviceUniqueID;
                         MA.NativeDeviceIdentifer = Device.NativeDeviceIdentifier;
-                        bool StartFailMode = false;
+                        MA.HeartbeatTime = -1;
+                        MA.UseHeartbeatProcessing = false;
+                        MA.UseMaintanenceProcessing = false;
 
+                        for (int i = 0; i < e.Attributes.Count; i++)
+                        {
+                            switch (e.Attributes[i].Name.ToLower())
+                            {
+                                case "heartbeatinterval":
+                                    MA.HeartbeatTime = _PCF.ConvertToInt32(e.Attributes[i].Value);
+                                    break;
+
+                                case "mainttask":
+                                    MA.Task = e.Attributes[i].Value;
+                                    break;
+
+                            }
+                        }
+                        MA.UseHeartbeatProcessing = true;
+                        MA.LastResult = true;
+                        Device.StoredDeviceData.Local_MaintanenceInformation.Add(MA);
+                        ProcessXMLMaintanenceInformation(ref MA, "","", MaintanenceCommands.NewTask);
+                    }
+                }
+                catch (Exception CHMAPIEx)
+                {
+                    _PCF.AddToUnexpectedErrorQueue(CHMAPIEx, Device.XMLConfiguration);
+                    ServerAccessFunctions.ProcessDeviceXMLScriptFromDataSlim.Release();
+                    return (false);
+                }
+
+
+                try //Maintenance
+                {
+                    XmlNodeList MaintList = XML.SelectNodes("/root/maintenance/command");
+                    if (MaintList.Count == 0)
+                        MaintList = XML.SelectNodes("/maintenance/command");
+
+                    foreach (XmlElement e in MaintList)
+                    {
+                        MaintenanceStruct MA = new MaintenanceStruct();
+                        MA.URL = "";
+                        MA.FailInterval = _PCF.GetStartupField("DefaultFailinterval", 300);
+                        MA.NormalInterval = _PCF.GetStartupField("DefaultNormalInterval", 60);
+                        MA.StartDelay = _PCF.GetStartupField("DefaultStartDelay", 60);
+                        MA.NumberOfConsecutiveFailsForDeviceToBeOffline = _PCF.GetStartupField("DefaultMaxConsecutiveFails", 4);
+                        MA.LastResult = false;
+                        MA.LastTime = DateTime.MinValue;
+                        MA.NextTime = DateTime.MaxValue;
+                        MA.NumberOfConsecutiveFails = 0;
+                        MA.DeviceUniqueID = Device.DeviceUniqueID;
+                        MA.NativeDeviceIdentifer = Device.NativeDeviceIdentifier;
+                        MA.HeartbeatTime = -1;
+                        MA.UseHeartbeatProcessing = false;
+                        MA.UseMaintanenceProcessing = false;
+                        bool StartFailMode = false;
                         for (int i = 0; i < e.Attributes.Count; i++)
                         {
                             switch (e.Attributes[i].Name.ToLower())
@@ -2879,17 +3380,26 @@ namespace CHMPluginAPI
                                     MA.NumberOfConsecutiveFailsForDeviceToBeOffline = _PCF.ConvertToInt32(e.Attributes[i].Value);
                                     break;
 
+                                case "startdelay":
+                                    MA.StartDelay = _PCF.ConvertToInt32(e.Attributes[i].Value);
+                                    break;
+
                                 case "startmode":
                                     if (e.Attributes[i].Value.ToLower() == "fail")
                                         StartFailMode = true;
                                     break;
+
+                                case "mainttask":
+                                    MA.Task = e.Attributes[i].Value;
+                                    break;
                             }
                         }
+                        MA.UseMaintanenceProcessing = true;
                         Device.StoredDeviceData.Local_MaintanenceInformation.Add(MA);
                         if(!StartFailMode)
-                            ProcessXMLMaintanenceInformation(ref MA, "", MaintanenceCommands.NewTask);
+                            ProcessXMLMaintanenceInformation(ref MA, "", "", MaintanenceCommands.NewTask);
                         else
-                            ProcessXMLMaintanenceInformation(ref MA, "", MaintanenceCommands.NewTaskDefaultFail);
+                            ProcessXMLMaintanenceInformation(ref MA, "", "", MaintanenceCommands.NewTaskDefaultFail);
 
                     }
                 }
@@ -3539,133 +4049,252 @@ namespace CHMPluginAPI
         }
 
 
-        private void ProcessXMLMaintanenceInformationUpdateTasks(ref DateTime MT, ref MaintenanceStruct MA)
+        internal bool ProcessXMLMaintanenceInformation(ref MaintenanceStruct MA, string NativeDeviceIdentifier, string Task, MaintanenceCommands Process)
         {
-            while (_PluginCommonFunctions.MaintenanceRequests.ContainsKey(MT))
+            _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
+            try
             {
-                MT = MT.AddSeconds(1);
-            }
-            MA.NextTime = MT;
-            _PluginCommonFunctions.MaintenanceRequests.Add(MT, MA.NativeDeviceIdentifer);
-
-
-        }
-
-        internal bool ProcessXMLMaintanenceInformation(ref MaintenanceStruct MA, string NativeDeviceIdentifier, MaintanenceCommands Process)
-        {
-            DateTime DT = _PluginCommonFunctions.CurrentTime;
-
-            if (Process == MaintanenceCommands.NewTask || Process == MaintanenceCommands.NewTaskDefaultFail)
-            {
-                DateTime MT = DT; 
-                if (Process == MaintanenceCommands.NewTask)
-                    MT = DT.AddSeconds(MA.NormalInterval);
-                if (Process == MaintanenceCommands.NewTaskDefaultFail)
-                    MT = DT.AddSeconds(MA.FailInterval);
-                _PluginCommonFunctions.MaintenanceRequestsByNativeID[MA.NativeDeviceIdentifer] = MA;
-                //Make Sure Min Time between Events
-                while (_PluginCommonFunctions.MaintenanceRequests.ContainsKey(MT))
+                ServerAccessFunctions.MaintenanceProcessSlim.Wait();
+                if (Process == MaintanenceCommands.SkipOneMaintenanceCycle) //To allow the system to process a manual command
                 {
-                    MT = MT.AddSeconds(1);
+                    LastMaintTime = _PluginCommonFunctions.CurrentTime.AddMilliseconds(_PCF.GetStartupField("MinTimeBetweenMaintenanceRequest", 4)*2);
+                    ServerAccessFunctions.MaintenanceProcessSlim.Release();
+                    return (true);
                 }
-                MA.NextTime = MT;
-                _PluginCommonFunctions.MaintenanceRequests.Add(MT, MA.NativeDeviceIdentifer);
+
+                string LocalTask = Task.ToLower();
+                string FName = string.Format("Module {0:0000}", _PCF.PluginIDCode);
+                DateTime DT = _PluginCommonFunctions.CurrentTime;
+
+                if (Process == MaintanenceCommands.NewTask || Process == MaintanenceCommands.NewTaskDefaultFail)
+                {
+                    DateTime MT = DT;
+                    MA.LastResult = true;
+                    if (MA.UseMaintanenceProcessing)
+                    {
+                        if (Process == MaintanenceCommands.NewTask)
+                            MT = DT.AddSeconds(MA.NormalInterval + MA.StartDelay);
+                        if (Process == MaintanenceCommands.NewTaskDefaultFail)
+                            MT = DT.AddSeconds(MA.FailInterval + MA.StartDelay);
+
+                        //Make Sure Min Time between Events
+                        while (_PluginCommonFunctions.MaintenanceRequests.ContainsKey(MT))
+                        {
+                            MT = MT.AddSeconds(1);
+                        }
+                        MA.NextTime = MT;
+                        _PluginCommonFunctions.MaintenanceRequests.Add(MT, MA);
+                    }
+
+                    if (MA.UseHeartbeatProcessing)
+                    {
+                        MT = DT.AddSeconds(MA.HeartbeatTime);
+                        while (_PluginCommonFunctions.MaintenanceRequests.ContainsKey(MT))
+                        {
+                            MT = MT.AddSeconds(1);
+                        }
+                        MA.NextTime = MT;
+                        _PluginCommonFunctions.MaintenanceRequests.Add(MT, MA);
+                    }
+                }
+                else
+                {
+                    if (DoMaintenance)
+                    {
+                        if (Process == MaintanenceCommands.DoTasks)
+                        {
+                            TimeSpan diff = _PluginCommonFunctions.CurrentTime - LastMaintTime;
+
+                            if (Process == MaintanenceCommands.DoTasks && 
+                                ((diff.TotalMilliseconds > _PCF.GetStartupField("MinTimeBetweenMaintenanceRequest", 4) && !_UseMaintenanceFallbackTime) ||
+                                (diff.TotalMilliseconds > _PCF.GetStartupField("MaintenanceFallbackTime", 10) && _UseMaintenanceFallbackTime)))
+                            {
+                                if (_PluginCommonFunctions.MaintenanceRequests.Count > 0)
+                                {
+                                    if (_PluginCommonFunctions.MaintenanceRequests.ElementAt(0).Key <= DT)
+                                    {
+                                        MA = _PluginCommonFunctions.MaintenanceRequests.ElementAt(0).Value;
+                                        _PluginCommonFunctions.MaintenanceRequests.Remove(_PluginCommonFunctions.MaintenanceRequests.ElementAt(0).Key);
+
+                                        DateTime CT = DT;
+                                        if (MA.UseMaintanenceProcessing)
+                                        {
+                                            MA.TotalNumberOfTimesProcessed++;
+                                            if (!string.IsNullOrEmpty(MA.URL))
+                                            {
+                                                PluginCommunicationStruct PCS = new PluginCommunicationStruct();
+                                                PCS.Command = PluginCommandsToPlugins.MaintanenceRequest;
+                                                PCS.DeviceUniqueID = MA.DeviceUniqueID;
+                                                PCS.String3 = MA.URL;
+                                                PCS.String2 = "";
+                                                PCS.String = MA.DeviceUniqueID;
+                                                PCS.UniqueNumber = string.Format("{0:0000}-{1:0000000000}", _PCF.PluginIDCode, _PCF.NextSequence);
+                                                PCS.OriginPlugin = ServerAccessFunctions.PluginSerialNumber;
+                                                PCS.DestinationPlugin = ServerAccessFunctions.PluginSerialNumber;
+                                                ServerAccessFunctions SAF = new ServerAccessFunctions();
+                                                SAF.CHMAPI_PluginInformationCommingFromPlugin(DT, PCS);
+                                                if (MA.NumberOfConsecutiveFails == 0)
+                                                    MA.TotalNumberOfSuccessfullProcesses++;
+                                                else
+                                                    MA.TotalNumberOfFailures++;
+                                            }
+                                            if (MA.NumberOfConsecutiveFails >= MA.NumberOfConsecutiveFailsForDeviceToBeOffline && MA.NumberOfConsecutiveFailsForDeviceToBeOffline > 0)
+                                            {
+                                                CT = DT.AddSeconds(MA.FailInterval);
+                                                if (MA.LastResult == true) //Make Device  Off-Line
+                                                {
+                                                    _PCF.TakeDeviceOffLine(MA.DeviceUniqueID);
+                                                    MA.LastResult = false;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                CT = DT.AddSeconds(MA.NormalInterval);
+                                            }
+                                            MA.NumberOfConsecutiveFails++;
+                                        }
+
+                                        if (MA.UseHeartbeatProcessing)
+                                        {
+                                            MA.TotalNumberOfFailures++;
+                                            MA.NumberOfConsecutiveFails++;
+                                            if (MA.LastResult == true) //Make Device  Off-Line
+                                            {
+                                                _PCF.TakeDeviceOffLine(MA.DeviceUniqueID);
+                                                MA.LastResult = false;
+                                            }
+                                            CT = DT.AddSeconds(MA.HeartbeatTime);
+                                        }
+
+                                        //Make Sure Min Time between Events
+                                        while (_PluginCommonFunctions.MaintenanceRequests.ContainsKey(CT))
+                                        {
+                                            CT = CT.AddSeconds(1);
+                                        }
+                                        MA.NextTime = CT;
+                                        _PluginCommonFunctions.MaintenanceRequests.Add(CT, MA);
+                                        LastMaintTime = _PluginCommonFunctions.CurrentTime;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (Process == MaintanenceCommands.TaskSucessful)
+                        {
+                            for (int i = 0; i < _PluginCommonFunctions.MaintenanceRequests.Count; i++)
+                            {
+                                MA = _PluginCommonFunctions.MaintenanceRequests.ElementAt(i).Value;
+                                DateTime XDate = _PluginCommonFunctions.MaintenanceRequests.ElementAt(i).Key;
+                                if (MA.NativeDeviceIdentifer != NativeDeviceIdentifier || MA.Task.ToLower() != LocalTask.ToLower())
+                                    continue;
+
+                                if (MA.UseMaintanenceProcessing)
+                                {
+                                    if (MA.NumberOfConsecutiveFails > MA.NumberOfConsecutiveFailsForDeviceToBeOffline && MA.NumberOfConsecutiveFailsForDeviceToBeOffline > 0)
+                                    {
+                                        //Delete and Change
+
+                                        _PluginCommonFunctions.MaintenanceRequests.Remove(XDate);
+                                        //Make Sure Min Time between Events
+                                        DateTime CT = DT.AddSeconds(MA.NormalInterval);
+                                        while (_PluginCommonFunctions.MaintenanceRequests.ContainsKey(CT))
+                                        {
+                                            CT = CT.AddSeconds(1);
+                                        }
+                                        MA.NextTime = CT;
+                                        _PluginCommonFunctions.MaintenanceRequests.Add(CT, MA);
+                                        MA.NumberOfConsecutiveFails = 0;
+                                        MA.LastTime = DT;
+                                        MA.LastResult = true;
+                                        Debug.WriteLine("TaskSucessful" + MA.NativeDeviceIdentifer + " " + NativeDeviceIdentifier);
+                                        break;
+
+                                    }
+                                    MA.NumberOfConsecutiveFails = 0;
+                                    MA.LastTime = DT;
+                                    MA.LastResult = true;
+                                    Debug.WriteLine("TaskSucessful" + MA.NativeDeviceIdentifer + " " + NativeDeviceIdentifier);
+                                    ServerAccessFunctions.MaintenanceProcessSlim.Release();
+                                    return (true);
+
+                                }
+
+                                if (MA.UseHeartbeatProcessing)
+                                {
+                                    _PluginCommonFunctions.MaintenanceRequests.Remove(XDate);
+                                    DateTime CT = DT.AddSeconds(MA.HeartbeatTime);
+                                    while (_PluginCommonFunctions.MaintenanceRequests.ContainsKey(CT))
+                                    {
+                                        CT = CT.AddSeconds(1);
+                                    }
+                                    MA.NextTime = CT;
+                                    MA.LastTime = DT;
+                                    MA.LastResult = true;
+                                    MA.NumberOfConsecutiveFails = 0;
+                                    MA.TotalNumberOfSuccessfullProcesses++;
+                                    _PluginCommonFunctions.MaintenanceRequests.Add(CT, MA);
+                                    Debug.WriteLine("Heartbeat" + MA.NativeDeviceIdentifer + " " + NativeDeviceIdentifier);
+
+                                }
+                            }
+                        }
+                    }
+                }
+
+                //Update System Flags
+                if (_PluginCommonFunctions.MaintenanceRequests.Count == 0)
+                {
+                    _PCF.AddFlagForTransferToServer(
+                         FName,
+                         "Maintenance Next Item",
+                         "None Scheduled",
+                         "None Scheduled",
+                         "",
+                         "",
+                         FlagChangeCodes.Changeable,
+                         FlagActionCodes.addorupdate,
+                         "");
+
+                }
+                else
+                {
+                    DeviceStruct Device;
+                    MaintenanceStruct LMA;
+                    LMA = _PluginCommonFunctions.MaintenanceRequests.ElementAt(0).Value;
+                    if (_PluginCommonFunctions.LocalDevicesByDeviceIdentifier.TryGetValue(LMA.NativeDeviceIdentifer, out Device))
+                    {
+
+                        _PCF.AddFlagForTransferToServer(
+                            FName,
+                            "Maintenance Next Item",
+                            _PluginCommonFunctions.MaintenanceRequests.ElementAt(0).Key + "-" + _PCF.GetRoomFromUniqueID(Device.RoomUniqueID) + " " + Device.DeviceName,
+                            string.Format("Times Process {0} Times Succeeded {1} Times Failed {2}/{3}", LMA.TotalNumberOfTimesProcessed, LMA.TotalNumberOfSuccessfullProcesses, LMA.TotalNumberOfFailures, LMA.NumberOfConsecutiveFails),
+                            Device.RoomUniqueID,
+                            Device.DeviceUniqueID,
+                            FlagChangeCodes.Changeable,
+                            FlagActionCodes.addorupdate,
+                            Device.UOMCode);
+                    }
+                }
+                _PCF.AddFlagForTransferToServer(
+                    FName,
+                    "Maintenance Queue",
+                    string.Format("Items In Queue {0}", _PluginCommonFunctions.MaintenanceRequests.Count),
+                    string.Format("Items In Queue {0}", _PluginCommonFunctions.MaintenanceRequests.Count),
+                    "",
+                    "",
+                    FlagChangeCodes.Changeable,
+                    FlagActionCodes.addorupdate,
+                    "");
+                ServerAccessFunctions.MaintenanceProcessSlim.Release();
                 return (true);
             }
-
-            if (DoMaintenance)
+            catch (Exception CHMAPIEx)
             {
-                TimeSpan diff = _PluginCommonFunctions.CurrentTime - LastMaintTime;
-                _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
-                if (Process == MaintanenceCommands.DoTasks && diff.TotalMilliseconds > _PCF.GetStartupField("MinTimeBetweenMaintenanceRequest", 4))
-                {
-                    if (_PluginCommonFunctions.MaintenanceRequests.Count > 0)
-                    {
-                        if (_PluginCommonFunctions.MaintenanceRequests.ElementAt(0).Key <= DT)
-                        {
-                            string NativeDeviceCode = _PluginCommonFunctions.MaintenanceRequests.ElementAt(0).Value;
-                            _PluginCommonFunctions.MaintenanceRequests.Remove(_PluginCommonFunctions.MaintenanceRequests.ElementAt(0).Key);
-                            if (_PluginCommonFunctions.MaintenanceRequestsByNativeID.TryGetValue(NativeDeviceCode, out MA))
-                            {
-
-                                PluginCommunicationStruct PCS = new PluginCommunicationStruct();
-                                PCS.Command = PluginCommandsToPlugins.MaintanenceRequest;
-                                PCS.DeviceUniqueID = MA.DeviceUniqueID;
-                                PCS.String3 = MA.URL;
-                                PCS.String2 = "";
-                                PCS.String = MA.DeviceUniqueID;
-                                PCS.UniqueNumber = string.Format("{0:0000}-{1:0000000000}", _PCF.PluginIDCode, _PCF.NextSequence);
-                                PCS.OriginPlugin = ServerAccessFunctions.PluginSerialNumber;
-                                PCS.DestinationPlugin = ServerAccessFunctions.PluginSerialNumber;
-                                ServerAccessFunctions SAF = new ServerAccessFunctions();
-                                SAF.CHMAPI_PluginInformationCommingFromPlugin(DT, PCS);
-                                DateTime CT;
-                                if (MA.NumberOfConsecutiveFails > MA.NumberOfConsecutiveFailsForDeviceToBeOffline)
-                                {
-                                    CT = DT.AddSeconds(MA.FailInterval);
-                                    if (MA.LastResult == false) //Create Flag for Off-Line
-                                    {
-                                        //string V = "<property id=\"" + Control + "\"  value=\"" + Value + "\" formatted=\"" + Formatted + "\"  uom=\"" + UOM + "\"/>";
-                                        //ProcessDeviceXMLScriptFromData(ref Device, V, XMLDeviceScripts.DeviceScriptsDataTypes.XML);
-                                    }
-                                    MA.LastResult = false;
-                                }
-                                else
-                                {
-                                    CT = DT.AddSeconds(MA.NormalInterval);
-                                }
-                                MA.NumberOfConsecutiveFails++;
-                                //Make Sure Min Time between Events
-                                while (_PluginCommonFunctions.MaintenanceRequests.ContainsKey(CT))
-                                {
-                                    CT = CT.AddSeconds(1);
-                                }
-                                MA.NextTime = CT;
-                                _PluginCommonFunctions.MaintenanceRequests.Add(CT, MA.NativeDeviceIdentifer);
-                                LastMaintTime= _PluginCommonFunctions.CurrentTime;
-                            }
-
-                        }
-                    }
-                }
-
-                if (Process == MaintanenceCommands.TaskSucessful)
-                {
-
-                    if (_PluginCommonFunctions.MaintenanceRequestsByNativeID.TryGetValue(NativeDeviceIdentifier, out MA))
-                    {
-                        if (MA.NumberOfConsecutiveFails > MA.NumberOfConsecutiveFailsForDeviceToBeOffline)
-                        {
-                            //Delete and Change
-
-                            DateTime Key = _PluginCommonFunctions.MaintenanceRequests.FirstOrDefault(x => x.Value == NativeDeviceIdentifier).Key;
-                            _PluginCommonFunctions.MaintenanceRequests.Remove(Key);
-                            //Make Sure Min Time between Events
-                            DateTime CT = DT.AddSeconds(MA.NormalInterval);
-                            while (_PluginCommonFunctions.MaintenanceRequests.ContainsKey(CT))
-                            {
-                                CT = CT.AddSeconds(1);
-                            }
-                            MA.NextTime = CT;
-                            _PluginCommonFunctions.MaintenanceRequests.Add(CT, MA.NativeDeviceIdentifer);
-                        }
-                        MA.NumberOfConsecutiveFails = 0;
-                        MA.LastTime = DT;
-                        MA.LastResult = true;
-                        Debug.WriteLine("TaskSucessful" + MA.NativeDeviceIdentifer + " " + NativeDeviceIdentifier);
-                        return (true);
-                    }
-                }
-
-                if(Process== MaintanenceCommands.SkipOneMaintenanceCycle) //To allow the system to process a manual command
-                {
-                    LastMaintTime = _PluginCommonFunctions.CurrentTime;
-                    return (true);
-
-                }
-
+                _PCF.AddToUnexpectedErrorQueue(CHMAPIEx);
+                ServerAccessFunctions.MaintenanceProcessSlim.Release();
+                return (false);
             }
-            return (false);
         }
     }
     

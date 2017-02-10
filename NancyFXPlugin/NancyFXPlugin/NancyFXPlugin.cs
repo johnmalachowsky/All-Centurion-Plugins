@@ -37,6 +37,8 @@ namespace CHMModules
 
         private static _PluginCommonFunctions PluginCommonFunctions;
         internal static _PluginDatabaseAccess _PDBA;
+        private static bool WebServerStarted = false;
+        private static int WebserverStartupDelay;
 
 
         #region WebServer Specific Values
@@ -62,23 +64,47 @@ namespace CHMModules
             ServerAccessFunctions._ShutDownPlugin += ShutDownPluginEventHandler;
             ServerAccessFunctions._StartupInfoFromServer += StartupInfoEventHandler;
             ServerAccessFunctions._PluginStartupCompleted += PluginStartupCompleted;
-            //            ServerAccessFunctions._IncedentFlag += IncedentFlagEventHandler;
-            ServerAccessFunctions._Command += CommandEvent;
+            ServerAccessFunctions._IncedentFlag += IncedentFlagEventHandler;
             ServerAccessFunctions._PluginStartupInitialize += PluginStartupInitialize;
             _PDBA = new _PluginDatabaseAccess(Path.GetFileNameWithoutExtension((Assembly.GetExecutingAssembly().GetName().Name)));
 
 
         }
 
-        private static void CommandEvent(ServerEvents WhichEvent, PluginEventArgs Value)
+ 
+        private static void IncedentFlagEventHandler(ServerEvents WhichEvent, PluginEventArgs Value)
         {
 
+            try
+            {
+                if (Value.IncedentFlags == PluginIncedentFlags.NewDevice)
+                {
+                    _PluginCommonFunctions.AddLocalDevice((DeviceStruct)Value.Object);
+                    return;
+                }
+
+                if (Value.IncedentFlags == PluginIncedentFlags.NewRoom)
+                {
+                    string[] Values = (string[])Value.Object;
+                    _PluginCommonFunctions.LocalRooms.Add(new Tuple<string, string, int>(Values[0], Values[1], -1));
+                    _PluginCommonFunctions.RoomArray = _PluginCommonFunctions.LocalRooms.ToArray();
+                    for (int i = 0; i < _PluginCommonFunctions.RoomArray.Length; i++)
+                    {
+                        Tuple<string, string, int> R = Tuple.Create(_PluginCommonFunctions.RoomArray[i].Item1, _PluginCommonFunctions.RoomArray[i].Item2.ToLower() + " ", _PluginCommonFunctions.RoomArray[i].Item3);
+                        _PluginCommonFunctions.RoomArray[i] = R;
+
+                    }
+                    Array.Sort(_PluginCommonFunctions.RoomArray, ((x, y) => y.Item2.Length.CompareTo(x.Item2.Length)));
+                    return;
+                }
+            }
+            catch (Exception CHMAPIEx)
+            {
+                _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
+                _PCF.AddToUnexpectedErrorQueue(CHMAPIEx);
+            }
+
         }
-
-        //private static void IncedentFlagEventHandler(ServerEvents WhichEvent, PluginEventArgs Value)
-        //{
-
-        //}
 
         private static void PluginStartupInitialize(ServerEvents WhichEvent, PluginEventArgs Value)
         {
@@ -92,13 +118,7 @@ namespace CHMModules
         private static void PluginStartupCompleted(ServerEvents WhichEvent, PluginEventArgs Value)
         {
             _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
-            string Port, Address;
-
- 
-            _PCF.GetStartupField("HTTPPort", out Port);
-            _PCF.GetStartupField("HTTPAddress", out Address);
-
-            HTMLRoutines.StartWebServer(Address, Port);
+            WebserverStartupDelay = _PCF.GetStartupField("WebserverStartupDelay",60);
         }
 
         private static void FlagCommingServerEventHandler(ServerEvents WhichEvent)
@@ -108,6 +128,13 @@ namespace CHMModules
 
         private static void HeartbeatServerEventHandler(ServerEvents WhichEvent, PluginEventArgs Value)
         {
+            if(!WebServerStarted)
+            {
+                if (_PluginCommonFunctions.CurrentTime> ServerAccessFunctions.StartupCompletedTime.AddSeconds(WebserverStartupDelay))
+                    StartWebserver();
+            }
+
+
         }
 
 
@@ -226,7 +253,18 @@ namespace CHMModules
 
         #region Plugin Routines 
 
- 
+        private static void StartWebserver()
+        {
+            string Port, Address;
+            _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
+
+            WebServerStarted = true;
+            _PCF.GetStartupField("HTTPPort", out Port);
+            _PCF.GetStartupField("HTTPAddress", out Address);
+
+            HTMLRoutines.StartWebServer(Address, Port, WebserverStartupDelay);
+
+        }
 
         internal class HTMLRoutines
         {
@@ -258,6 +296,28 @@ namespace CHMModules
                 internal string TemplateName;
                 internal string PasswordRequired;
                 internal bool FirstDisplay;
+                internal Dictionary<String, String> HTMLDeviceElementStatus;
+
+                internal bool CheckAndUpdateElementStatus(string Element, string Activity, string ActionXML)
+                {
+                    string S;
+                    if (!this.HTMLDeviceElementStatus.TryGetValue(Element + Activity, out S))
+                    {
+                        this.HTMLDeviceElementStatus.Add(Element + Activity, ActionXML);
+                        return (true);
+                    }
+                    if (S != ActionXML)
+                    {
+                        this.HTMLDeviceElementStatus[Element + Activity] = ActionXML;
+                        return (true);
+                    }
+                    return (false);
+                }
+
+                internal bool DeleteElementStatus(string Element, string Activity)
+                {
+                    return (this.HTMLDeviceElementStatus.Remove(Element + Activity));
+                }
             };
 
             internal static ConcurrentDictionary<string, HTMLSessionData> HTMLSessionTable;
@@ -289,13 +349,13 @@ namespace CHMModules
                 return (PW.PWLevel);
             }
 
-            internal static void StartWebServer(string Address, string Port)//Changable for each type of Webserver
+            internal static void StartWebServer(string Address, string Port, int delay)//Changable for each type of Webserver
             {
                 _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
 
                 try
                 {
-                    _PluginCommonFunctions.GenerateLocalMessage(1, "", "");
+                    _PluginCommonFunctions.GenerateLocalMessage(1, "", WebserverStartupDelay.ToString());
                     HTMLObjectTypes = new Dictionary<string, string>();
                     HTMLSessionTable = new ConcurrentDictionary<string, HTMLRoutines.HTMLSessionData>();
                     //ProcessHTMLSlim = new SemaphoreSlim(1, 1);
@@ -348,7 +408,7 @@ namespace CHMModules
             {
                 _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
                 //ProcessHTMLSlim.Wait();
-
+                //Debug.WriteLine(URL);
                 try
                 {
 
@@ -449,6 +509,7 @@ namespace CHMModules
                         LocalHTMLSessionData.LastUpdateIsAutoRefresh = false;
                         LocalHTMLSessionData.FirstDisplay = false;
                         LocalHTMLSessionData.Actions = new Dictionary<string, Tuple<string, string>>();
+                        LocalHTMLSessionData.HTMLDeviceElementStatus = new Dictionary<string, string>();
                         HTMLSessionTable.TryAdd(SessionIDCode, LocalHTMLSessionData);
                         if(FileExtension != ".html" || string.IsNullOrEmpty(FileName))
                         {
@@ -465,6 +526,7 @@ namespace CHMModules
                         {
                             string X = URL.Substring(0, URL.Length-(HTMLRefreshRequest.Length + 1));
                             FileName = Path.GetFileNameWithoutExtension(X).ToLower();
+                            LocalHTMLSessionData.HTMLDeviceElementStatus.Clear();
                         }
 
                         if (FileName + FileExtension == HTMLLoginPage.ToLower())
@@ -549,61 +611,54 @@ namespace CHMModules
                         //ResponseReDirect = "/" + LocalHTMLSessionData.CurrentPageRequested;
                         ResponseReDirect = "";
                         JavaUpdate = "";
-                        string NewColor;
-
+ 
                         if (LocalHTMLSessionData.FlagValuesToDisplay != null && LocalHTMLSessionData.FlagValuesToDisplay.Length > 0)
                         {
                             Tuple<string, string, string>[] FlagValues;
                             FlagValues = ServerAccessFunctions.GetFlagInListFromServer(LocalHTMLSessionData.FlagValuesToDisplay);
                             string Val = "";
                             string Q = "";
+                            string Default = "";
+
                             for (int i = 0; i < FlagValues.Length; i++)
                             {
-
-                                //                                if (LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue != FlagValues[i].Item1 || LocalHTMLSessionData.FirstDisplay)
-                                LocalHTMLSessionData.FlagValuesToDisplayData[i].LastFlagValue = LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue;
-                                LocalHTMLSessionData.FlagValuesToDisplayData[i].LastFlagValueUpdateTime = LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValueUpdateTime;
-                                LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue = FlagValues[i].Item1;
-                                if (!string.IsNullOrEmpty(FlagValues[i].Item3))
-                                    LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue += FlagValues[i].Item3;
-                                LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValueUpdateTime = SessionTime;
-
-                                Val += " " + LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal + LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue;
-                                if (i + 1 >= FlagValues.Length || LocalHTMLSessionData.FlagValuesToDisplayData[i].Id != LocalHTMLSessionData.FlagValuesToDisplayData[i + 1].Id)
+                                //Process Literals for changes :<() (Empty flag and literal value that begins with a ?-
+                                if (!string.IsNullOrEmpty(LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal) && LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal.Substring(0, 1) == "?")
                                 {
-                                    if (LocalHTMLSessionData.FlagValuesToDisplayData[i].NoFlagDisplay)
-                                        Val = "";
-                                    Q = "<updates  name=\"" + LocalHTMLSessionData.FlagValuesToDisplayData[i].Id + "\" value=\"" + Val.Trim() + "\"> </updates>\r\n";
+                                    string QQQ = LocalHTMLSessionData.FlagValuesToDisplay[i];
+                                    if (string.IsNullOrEmpty(QQQ) && i + 1 < LocalHTMLSessionData.FlagValuesToDisplay.Length)
+                                        QQQ = LocalHTMLSessionData.FlagValuesToDisplay[i + 1];
 
-                                    if (LocalHTMLSessionData.FlagValuesToDisplayData[i].DisplayAttributes != null && LocalHTMLSessionData.FlagValuesToDisplayData[i].DisplayAttributes.Count > 0)
+                                    FlagDataStruct NFStruct = ServerAccessFunctions.GetSingleFlagFromServerFull(QQQ);
+                                    if (!string.IsNullOrEmpty(NFStruct.Name) && QQQ== NFStruct.Name)
                                     {
-                                        string LocalVal= LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue.ToLower().Trim();
-                                        bool matched = false;
-                                        string J = "";
-                                        foreach (DynamicHTMLAttributes d in LocalHTMLSessionData.FlagValuesToDisplayData[i].DisplayAttributes)
+                                        if (!string.IsNullOrEmpty(NFStruct.SourceUniqueID)) //Device
                                         {
-                                            string UsedLocalValue = LocalVal;
-                                            if (!string.IsNullOrEmpty(d.Flag))
+                                            DeviceStruct Device = new DeviceStruct();
+                                            RoomStruct Room = new RoomStruct();
+
+                                            if (ServerAccessFunctions.GetDeviceFromDB(NFStruct.SourceUniqueID, ref Device, ref Room))
                                             {
-                                                for (int x=0; x< LocalHTMLSessionData.FlagValuesToDisplay.Length;x++)
+                                                if (string.IsNullOrEmpty(Device.HTMLDisplayName))
                                                 {
-                                                    if(LocalHTMLSessionData.FlagValuesToDisplay[x]==d.Flag)
-                                                    {
-                                                        UsedLocalValue = FlagValues[x].Item1.ToLower().Trim(); 
-                                                        break;
-                                                    }
-
+                                                    LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal = "?";
                                                 }
-
-
-
+                                                else
+                                                    LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal = Device.HTMLDisplayName;
                                             }
-
-                                            if (d.Case == UsedLocalValue || (d.Mode == "default" && !matched))
+                                        }
+                                        Q = "<updates  name=\"" + LocalHTMLSessionData.FlagValuesToDisplayData[i].Id + "\" value=\"" + LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal.Trim() + "\"> </updates>\r\n";
+                                        if(LocalHTMLSessionData.CheckAndUpdateElementStatus(LocalHTMLSessionData.FlagValuesToDisplayData[i].Id,"VALUE",Q))
+                                            JavaUpdate = JavaUpdate + Q;
+                                        Q = "";
+                                    }
+                                    foreach (DynamicHTMLAttributes d in LocalHTMLSessionData.FlagValuesToDisplayData[i].DisplayAttributes)
+                                    {
+                                        string J = "";
+                                        if (string.IsNullOrEmpty(d.Flag))
+                                        {
+                                            if (d.LiteralCase == LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal)
                                             {
-                                                if (d.Case == UsedLocalValue)
-                                                    matched = true;
-
                                                 J = "<updates  name=\"" + d.ID + "\"";
 
                                                 if (!string.IsNullOrEmpty(d.Color))
@@ -615,19 +670,107 @@ namespace CHMModules
                                                 if (!string.IsNullOrEmpty(d.Text))
                                                     J = J + " text =\"" + d.Text.Trim() + "\"";
 
-                                                J = J + "> </updates>\r\n";
+                                                if (d.Default == "true")
+                                                    Default = d.ID;
+
+                                                J =  J+ "> </updates>\r\n";
+                                                if (LocalHTMLSessionData.CheckAndUpdateElementStatus(d.ID, "ATTRIB", J))
+                                                    JavaUpdate = JavaUpdate + J;
+                                                J = "";
                                             }
-
                                         }
-                                        JavaUpdate = JavaUpdate + J;
                                     }
-                                    JavaUpdate = JavaUpdate + Q;
-                                    Val = "";
                                 }
+                                else
+                                {
+                                    LocalHTMLSessionData.FlagValuesToDisplayData[i].LastFlagValue = LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue;
+                                    LocalHTMLSessionData.FlagValuesToDisplayData[i].LastFlagValueUpdateTime = LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValueUpdateTime;
+                                    if(!LocalHTMLSessionData.FlagValuesToDisplayData[i].UseRawFlagValue)
+                                        LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue = FlagValues[i].Item1;
+                                    else
+                                        LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue = FlagValues[i].Item2;
 
+                                    if (!string.IsNullOrEmpty(FlagValues[i].Item3) && !LocalHTMLSessionData.FlagValuesToDisplayData[i].UseRawFlagValue)
+                                        LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue += FlagValues[i].Item3;
+                                    LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValueUpdateTime = SessionTime;
+
+                                    Val += " " + LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal + LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue;
+                                    if (i + 1 >= FlagValues.Length || LocalHTMLSessionData.FlagValuesToDisplayData[i].Id != LocalHTMLSessionData.FlagValuesToDisplayData[i + 1].Id)
+                                    {
+                                        Q = "<updates  name=\"" + LocalHTMLSessionData.FlagValuesToDisplayData[i].Id + "\" value=\"" + Val.Trim() + "\"> </updates>\r\n";
+                                        if (LocalHTMLSessionData.CheckAndUpdateElementStatus(LocalHTMLSessionData.FlagValuesToDisplayData[i].Id, "VALUE", Q))
+                                        {
+                                            if (!LocalHTMLSessionData.FlagValuesToDisplayData[i].NoFlagDisplay)
+                                                JavaUpdate = JavaUpdate + Q;
+                                            else
+                                            {
+                                                foreach (DynamicHTMLAttributes d in LocalHTMLSessionData.FlagValuesToDisplayData[i].DisplayAttributes)
+                                                {
+                                                    LocalHTMLSessionData.DeleteElementStatus(d.ID, "ATTRIB");
+                                                }
+                                            }
+                                        }
+                                        Val = "";
+                                        Q = "";
+                                        if (LocalHTMLSessionData.FlagValuesToDisplayData[i].DisplayAttributes != null && LocalHTMLSessionData.FlagValuesToDisplayData[i].DisplayAttributes.Count > 0)
+                                        {
+                                            string LocalVal = LocalHTMLSessionData.FlagValuesToDisplayData[i].CurrentFlagValue.ToLower().Trim();
+                                            bool matched = false;
+                                            string J = "";
+                                            foreach (DynamicHTMLAttributes d in LocalHTMLSessionData.FlagValuesToDisplayData[i].DisplayAttributes)
+                                            {
+                                                string UsedLocalValue = LocalVal;
+                                                if (!string.IsNullOrEmpty(d.Flag))
+                                                {
+                                                    for (int x = 0; x < LocalHTMLSessionData.FlagValuesToDisplay.Length; x++)
+                                                    {
+                                                        if (LocalHTMLSessionData.FlagValuesToDisplay[x] == d.Flag)
+                                                        {
+                                                            UsedLocalValue = FlagValues[x].Item1.ToLower().Trim();
+                                                            break;
+                                                        }
+
+                                                    }
+
+
+
+                                                }
+
+                                                if (Default!= d.ID)
+                                                {
+                                                    if (d.Case == UsedLocalValue || (d.Mode == "default" && !matched))
+                                                    {
+                                                        if (d.Case == UsedLocalValue)
+                                                            matched = true;
+
+                                                        J = "<updates  name=\"" + d.ID + "\"";
+
+                                                        if (!string.IsNullOrEmpty(d.Color))
+                                                            J = J + " color =\"" + d.Color.Trim() + "\"";
+
+                                                        if (!string.IsNullOrEmpty(d.TextColor))
+                                                            J = J + " textcolor =\"" + d.TextColor.Trim() + "\"";
+
+                                                        if (!string.IsNullOrEmpty(d.Text))
+                                                            J = J + " text =\"" + d.Text.Trim() + "\"";
+                                                        J = J + "> </updates>\r\n";
+                                                        if (LocalHTMLSessionData.CheckAndUpdateElementStatus(d.ID, "ATTRIB", J))
+                                                            JavaUpdate = JavaUpdate + J;
+                                                        J = "";
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Val = "";
+                                    }
+
+                                    
+                                }
                             }
                         }
-                        LocalHTMLSessionData.FirstDisplay = true;
+                        LocalHTMLSessionData.FirstDisplay = false;
+                        //Debug.WriteLine("JavaUpdate=" + JavaUpdate);
+
                         //ProcessHTMLSlim.Release();
                         return (true);
                     }
@@ -656,17 +799,70 @@ namespace CHMModules
                         }
                     }
 
-                    if (URLPath.Substring(0,8)=="/pushed/")
+                    if (URLPath.Length>13 &&  URLPath.Substring(0, 13) == "/controlinfo/")
+                    {
+                        string[] S = URLPath.Split(new string[] { "/" }, StringSplitOptions.RemoveEmptyEntries);
+
+                    }
+
+                    if (URLPath.Length > 7 && URLPath.Substring(0, 7) == "/moved/")
+                    {
+                        string[] S = URLPath.ToLower().Split(new string[] {"/"}, StringSplitOptions.RemoveEmptyEntries);
+                        Tuple<string, string> TVal;
+                        if (S.Length==3 && LocalHTMLSessionData.Actions.TryGetValue(S[1], out TVal))
+                        {
+                            FlagDataStruct NFStruct;
+                            if (!string.IsNullOrEmpty(TVal.Item1))
+                                NFStruct = ServerAccessFunctions.GetSingleFlagFromServerFull(TVal.Item1);
+                            else
+                                NFStruct = new FlagDataStruct();
+
+                            if (string.IsNullOrEmpty(TVal.Item1) || (!string.IsNullOrEmpty(NFStruct.Name) && !string.IsNullOrEmpty(TVal.Item2)))
+                            {
+                                Debug.WriteLine("Macro: " + TVal.Item2);
+                                if (TVal.Item2.Substring(0, 1) == "M")
+                                    ServerAccessFunctions.ProcessButtonMacro(NFStruct, TVal.Item2.Substring(1), S[2], false);
+                                if (TVal.Item2.Substring(0, 1) == "C")
+                                {
+                                    ServerAccessFunctions SAF = new ServerAccessFunctions();
+                                    SAF.ProcessCommandMacro(TVal.Item2.Substring(1), false);
+                                }
+
+
+                            }
+                            ResponseContentType = "";
+                            ResponseHeadders = null;
+                            ResponseReDirect = "";
+                            JavaUpdate = "";
+                            return (true);
+                        }
+                    }
+
+
+                    if (URLPath.Length > 8 && URLPath.Substring(0, 8) == "/pushed/")
                     {
                         Tuple<string, string> TVal;
                         if (LocalHTMLSessionData.Actions.TryGetValue(FileName, out TVal))
                         {
-                            FlagDataStruct NFStruct= ServerAccessFunctions.GetSingleFlagFromServerFull(TVal.Item1);
-                            if (!string.IsNullOrEmpty(NFStruct.Name) && !string.IsNullOrEmpty(TVal.Item2))
+                            FlagDataStruct NFStruct;
+                            if (!string.IsNullOrEmpty(TVal.Item1))
+                                NFStruct = ServerAccessFunctions.GetSingleFlagFromServerFull(TVal.Item1);
+                            else
+                                NFStruct = new FlagDataStruct();
+
+                            if (string.IsNullOrEmpty(TVal.Item1) || (!string.IsNullOrEmpty(NFStruct.Name) && !string.IsNullOrEmpty(TVal.Item2)))
                             {
                                 Debug.WriteLine("Macro: " + TVal.Item2);
-                                ServerAccessFunctions.ProcessButtonMacro(NFStruct, TVal.Item2);
+                                if(TVal.Item2.Substring(0,1)=="M")
+                                    ServerAccessFunctions.ProcessButtonMacro(NFStruct, TVal.Item2.Substring(1),false);
+                                if (TVal.Item2.Substring(0, 1) == "C")
+                                {
+                                    ServerAccessFunctions SAF = new ServerAccessFunctions();
+                                    SAF.ProcessCommandMacro(TVal.Item2.Substring(1),false);
+                                }
 
+                                if (NFStruct.Value == _PCF.OffLineName)
+                                    LocalHTMLSessionData.DeleteElementStatus(URLPath.Substring(8), "ATTRIB");
                                 ResponseContentType = "";
                                 ResponseHeadders = null;
                                 ResponseReDirect = "";
@@ -698,10 +894,12 @@ namespace CHMModules
                                 LocalHTMLSessionData.LastPageAccessed = FileName + FileExtension;
                                 if (OtherFields.TryGetValue("IsTemplate", out S))
                                 {
+                                    if(LocalHTMLSessionData.HTMLDeviceElementStatus!=null)
+                                        LocalHTMLSessionData.HTMLDeviceElementStatus.Clear();
                                     if (S.ToUpper() == "Y")
                                     {
                                         ResponseContentType = "";
-                                        ResponseHeadders = null;
+                                        ResponseHeadders = null;    
                                         JavaUpdate = "";
                                         ResponseReDirect = HTMLLoginPage;
                                         //ProcessHTMLSlim.Release();
@@ -760,7 +958,7 @@ namespace CHMModules
                                                         foreach (XmlNode BodyNode in RootNode.SelectNodes("display"))
                                                         {
                                                             string ID = "", Literal = "", Flag = "";
-                                                            bool NoFlagDisplay=false;
+                                                            bool NoFlagDisplay=false, UseRawFlagValue=false;
                                                             List<DynamicHTMLAttributes> DisplayAttributes = new List<DynamicHTMLAttributes>();
                                                             foreach (XmlNode DisplayNode in BodyNode)
                                                             {
@@ -785,16 +983,15 @@ namespace CHMModules
                                                                         Literal = DisplayNode.InnerText;
                                                                         if (!string.IsNullOrEmpty(Literal))
                                                                         {
-
-
                                                                             if (Literal.Substring(0,1)=="?") //HTMLDisplayValue
                                                                             {
                                                                                 FlagDataStruct NFStruct = ServerAccessFunctions.GetSingleFlagFromServerFull(Literal.Substring(1).Trim());
                                                                                 if (!string.IsNullOrEmpty(NFStruct.SourceUniqueID)) //Device
                                                                                 {
-                                                                                    DeviceStruct Device;
+                                                                                    DeviceStruct Device= new DeviceStruct();
+                                                                                    RoomStruct Room=new RoomStruct();
 
-                                                                                    if (_PluginCommonFunctions.LocalDevicesByUnique.TryGetValue(NFStruct.SourceUniqueID, out Device))
+                                                                                    if (ServerAccessFunctions.GetDeviceFromDB(NFStruct.SourceUniqueID, ref Device, ref Room))
                                                                                     {
                                                                                         if (string.IsNullOrEmpty(Device.HTMLDisplayName))
                                                                                         {
@@ -815,6 +1012,7 @@ namespace CHMModules
 
                                                                     case "flag":
                                                                     case "nodisplayflag":
+                                                                    case "userawflagvalue":
                                                                         if (!string.IsNullOrEmpty(Flag))
                                                                         {
                                                                             DynamicHTMLDataStruct dnsflag = new DynamicHTMLDataStruct();
@@ -823,7 +1021,9 @@ namespace CHMModules
                                                                             dnsflag.Flag = Flag;
                                                                             dnsflag.DisplayAttributes = DisplayAttributes;
                                                                             dnsflag.NoFlagDisplay = NoFlagDisplay;
+                                                                            dnsflag.UseRawFlagValue = UseRawFlagValue;
                                                                             NoFlagDisplay = false;
+                                                                            UseRawFlagValue = false;
                                                                             Data.Enqueue(dnsflag);
                                                                             DisplayAttributes = new List<DynamicHTMLAttributes>();
                                                                             Literal = "";
@@ -831,6 +1031,8 @@ namespace CHMModules
                                                                         Flag = DisplayNode.InnerText;
                                                                         if(DisplayNode.Name== "nodisplayflag")
                                                                             NoFlagDisplay = true;
+                                                                        if (DisplayNode.Name == "userawflagvalue")
+                                                                            UseRawFlagValue = true;
                                                                         break;
 
                                                                     case "state":
@@ -845,9 +1047,19 @@ namespace CHMModules
                                                                                             DynamicHTMLAttr.Case = a.Value.ToLower();
                                                                                             break;
                                                                                         }
+                                                                                    case "literalcase":
+                                                                                        {
+                                                                                            DynamicHTMLAttr.LiteralCase = a.Value.ToLower();
+                                                                                            break;
+                                                                                        }
                                                                                     case "mode":
                                                                                         {
                                                                                             DynamicHTMLAttr.Mode = a.Value.ToLower();
+                                                                                            break;
+                                                                                        }
+                                                                                    case "literalmode":
+                                                                                        {
+                                                                                            DynamicHTMLAttr.LiteralMode = a.Value.ToLower();
                                                                                             break;
                                                                                         }
                                                                                     case "id":
@@ -876,6 +1088,10 @@ namespace CHMModules
                                                                                             DynamicHTMLAttr.Flag = a.Value;
                                                                                             break;
                                                                                         }
+
+                                                                                    case "default":
+                                                                                        DynamicHTMLAttr.Default = a.Value;
+                                                                                        break;
                                                                                 }
 
                                                                             }
@@ -890,6 +1106,7 @@ namespace CHMModules
                                                             dns.Flag = Flag;
                                                             dns.DisplayAttributes = DisplayAttributes;
                                                             dns.NoFlagDisplay = NoFlagDisplay;
+                                                            dns.UseRawFlagValue = UseRawFlagValue;
                                                             Data.Enqueue(dns);
                                                         }
                                                     }
@@ -911,25 +1128,20 @@ namespace CHMModules
                                                                         break;
 
                                                                     case "macro":
-                                                                        Command = DisplayNode.InnerText;
+                                                                        Command = "M" + DisplayNode.InnerText;
+                                                                        break;
+
+                                                                    case "commandmacro":
+                                                                        Command = "C" + DisplayNode.InnerText;
                                                                         break;
                                                                 }
+
+                                                                LocalHTMLSessionData.Actions[ID] = new Tuple<string, string>(Flag, Command);
                                                             }
-                                                                                                                       
-                                                            LocalHTMLSessionData.Actions[ID]=new Tuple<string, string>(Flag, Command);
-                                                            
                                                         }
 
                                                     }
 
-                                                    LocalHTMLSessionData.FlagValuesToDisplayData = Data.ToArray();
-                                                    LocalHTMLSessionData.FlagValuesToDisplay = new string[LocalHTMLSessionData.FlagValuesToDisplayData.Count()];
-                                                    for (int i = 0; i < LocalHTMLSessionData.FlagValuesToDisplayData.Count(); i++)
-                                                    {
-                                                        LocalHTMLSessionData.FlagValuesToDisplay[i] = LocalHTMLSessionData.FlagValuesToDisplayData[i].Flag;
-                                                        if (!string.IsNullOrEmpty(LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal) && !string.IsNullOrEmpty(LocalHTMLSessionData.FlagValuesToDisplay[i]))
-                                                            LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal = LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal + " ";
-                                                    }
                                                 }
                                                 catch (Exception CHMAPIEx)
                                                 {
@@ -937,6 +1149,15 @@ namespace CHMModules
 
                                                 }
                                             }
+                                            LocalHTMLSessionData.FlagValuesToDisplayData = Data.ToArray();
+                                            LocalHTMLSessionData.FlagValuesToDisplay = new string[LocalHTMLSessionData.FlagValuesToDisplayData.Count()];
+                                            for (int i = 0; i < LocalHTMLSessionData.FlagValuesToDisplayData.Count(); i++)
+                                            {
+                                                LocalHTMLSessionData.FlagValuesToDisplay[i] = LocalHTMLSessionData.FlagValuesToDisplayData[i].Flag;
+                                                if (!string.IsNullOrEmpty(LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal) && !string.IsNullOrEmpty(LocalHTMLSessionData.FlagValuesToDisplay[i]))
+                                                    LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal = LocalHTMLSessionData.FlagValuesToDisplayData[i].Literal + " ";
+                                            }
+
 
                                         }
                                         catch (Exception CHMAPIEx)
@@ -968,6 +1189,7 @@ namespace CHMModules
                                                 return (false);
                                             }
                                             LocalHTMLSessionData.LastPageAccessed = FileName + FileExtension;
+                                            LocalHTMLSessionData.HTMLDeviceElementStatus.Clear();
                                         }
 
 

@@ -9,7 +9,7 @@ using System.Runtime.CompilerServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("websocket-sharp.dll")]
-[assembly: AssemblyCopyright("sta.blockhead")]
+[assembly: AssemblyCopyright("Copyright © Computers For Christ 2017")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

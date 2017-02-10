@@ -38,6 +38,8 @@ namespace CHMModules
         internal static bool LinkedCommReady = false;
         internal static bool Connected = false;
         internal static DateTime LastHueAccess = DateTime.MinValue;
+        
+        
 
         [JsonObject]
         public class WhitelistItem
@@ -202,18 +204,12 @@ namespace CHMModules
             ServerAccessFunctions._StartupInfoFromServer += StartupInfoEventHandler;
             ServerAccessFunctions._PluginStartupCompleted += PluginStartupCompleted;
             //            ServerAccessFunctions._IncedentFlag += IncedentFlagEventHandler;
-            ServerAccessFunctions._Command += CommandEvent;
             ServerAccessFunctions._PluginStartupInitialize += PluginStartupInitialize;
             
 
 
 
     }
-
-        private static void CommandEvent(ServerEvents WhichEvent, PluginEventArgs Value)
-        {
-
-        }
 
         //private static void IncedentFlagEventHandler(ServerEvents WhichEvent, PluginEventArgs Value)
         //{
@@ -729,33 +725,64 @@ namespace CHMModules
 
         static internal void UpdateLightValues(LightState Lght, DeviceStruct Device)
         {
-            XMLDeviceScripts XMLScripts = new XMLDeviceScripts();
+            _PluginCommonFunctions _PCF = new _PluginCommonFunctions();
 
 
 
-            string State, Brightnesss;
+            string State ="", Brightnesss="";
+            bool NewValue = false;
             if (Lght.IsReachable)
             {
                 if (Lght.IsOn)
                 {
-                    State = "On";
-                    Brightnesss = Lght.Brightness.ToString();
+                    if (Device.LocalStrVar02 != "On" || Device.LocalStrVar01 != Lght.Brightness.ToString())
+                    {
+                        NewValue = true;
+                        State = "On";
+                        Brightnesss = Lght.Brightness.ToString();
+                        Device.LocalIntVar01 = 0;
+                        Device.LocalStrVar01 = Brightnesss;
+                        Device.LocalStrVar02 = "On";
+                    }
                 }
                 else
                 {
-                    State = "Off";
-                    Brightnesss = "0";
+                    if (Device.LocalStrVar02 != "Off")
+                    {
+                        NewValue = true;
+                        State = "Off";
+                        Brightnesss = "0";
+                        Device.LocalIntVar01 = 0;
+                        Device.LocalStrVar01 = "0";
+                        Device.LocalStrVar02 = "Off";
+                    }
                 }
             }
             else
             {
-                State = "Off-Line";
-                Brightnesss = "-1";
+                Device.LocalIntVar01++;
+                if (Device.LocalIntVar01 > _PCF.GetStartupField("NumberOfOffLinesBeforeDisplayOffLine", 5))
+                {
+                    string OffLineName;
+                    _PCF.GetCHMStartupField("OffLineName", out OffLineName, "Off-Line");
+                    if (Device.LocalStrVar02 != OffLineName)
+                    {
+                        State = OffLineName;
+                        Brightnesss = "-1";
+                        Device.LocalStrVar01 = "-1";
+                        Device.LocalStrVar02 = OffLineName;
+                        _PCF.TakeDeviceOffLine(Device.DeviceUniqueID);
+                        NewValue = false;
+                    }
 
+                }
             }
-            string V = "<property state=\"" + State + "\"  Hue=\"" + Lght.Hue.ToString() + "\" brightness=\"" + Brightnesss + "\"  saturation=\"" + Lght.Saturation.ToString() + "\" colortemp=\"" + Lght.ColorTemperature.ToString() + "\" colormode=\"" + Lght.CurrentColorMode + "\"/>";
-            XMLScripts.ProcessDeviceXMLScriptFromData(ref Device, V, XMLDeviceScripts.DeviceScriptsDataTypes.XML);
-
+            if (NewValue)
+            {
+                XMLDeviceScripts XMLScripts = new XMLDeviceScripts();
+                string V = "<property state=\"" + State + "\"  Hue=\"" + Lght.Hue.ToString() + "\" brightness=\"" + Brightnesss + "\"  saturation=\"" + Lght.Saturation.ToString() + "\" colortemp=\"" + Lght.ColorTemperature.ToString() + "\" colormode=\"" + Lght.CurrentColorMode + "\"/>";
+                XMLScripts.ProcessDeviceXMLScriptFromData(ref Device, V, XMLDeviceScripts.DeviceScriptsDataTypes.XML);
+            }
 
 
         }

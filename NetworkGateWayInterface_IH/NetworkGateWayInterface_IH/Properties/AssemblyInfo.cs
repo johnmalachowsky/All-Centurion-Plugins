@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Computers For Christ")]
 [assembly: AssemblyProduct("Centurion Home Monitor")]
-[assembly: AssemblyCopyright("Copyright © Computers For Christ 2015")]
+[assembly: AssemblyCopyright("Copyright © Computers For Christ 2017")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
